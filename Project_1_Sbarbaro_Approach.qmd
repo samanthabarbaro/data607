@@ -1,0 +1,12 @@
+---
+title: "Project_1"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I visited Napa Valley twice and enjoyed the wine. I'd like to learn more about residual sugar levels and alcohol percentage.
+
+Dataset: https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/red_wine_dataset.csv
