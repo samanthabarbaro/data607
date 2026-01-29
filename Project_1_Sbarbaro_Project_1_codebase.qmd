@@ -1,0 +1,126 @@
+---
+title: "Project_1"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I visited Napa Valley twice and enjoyed the wine. I'd like to learn more about residual sugar levels and alcohol percentage.
+
+Dataset: https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/red_wine_dataset.csv
+
+(NB: I later realized these were Portuguese wines)
+
+```{r}
+library(tidyverse)
+
+url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/red_wine_dataset.csv"
+
+red_wine <- read.csv(url)
+
+glimpse(red_wine)
+```
+
+## This data needs to be properly formatted in a table
+
+It's currently in just one column. First, let's look at the headers to see what we're dealing with.
+
+```{r}
+head(red_wine,1)
+```
+
+### Make it a tibble 
+
+```{r}
+red_wine_tibble <- as_tibble(red_wine)
+```
+
+### Delimit by semicolons
+
+I tried a few tactics here. First, I tried the "separate" function, which would not allow me to use a semicolon as a delimiter, though it works with spaces. Then, I tried replacing the semicolon with a space (this gave me a warning because the argument was not an atomic vector, which is apparently coercive to the data, and you're not allowed to coerce the data).
+
+Eventually, I asked Gemini to help me with syntax for the separate_wider_delim function, which I was having trouble with. Apparently, this is a well-known data set, because Gemini even included the correct columns for me.
+
+```{r}
+red_wine_split <- red_wine_tibble %>%
+    separate_wider_delim(
+        cols = everything(),            
+        delim = ";",             
+        names = c("fixed_acidity", "volatile_acidity", "citric_acid", "residual_sugar", 
+                  "chlorides", "free_sulfur_dioxide", "total_sulfur_dioxide", 
+                  "density", "ph", "sulphates", "alcohol", "quality")
+    )
+
+##We'll take a look at the new columns here.
+
+glimpse(red_wine_split)
+```
+
+## Sugar vs. alcohol percentage
+
+I wanted to understand if there is a correlation between residual sugar and alcohol percentage. I was also interested in the quality rating. Here's a quick peek at those three columns.
+
+```{r}
+print(n=15, select(red_wine_split, c(residual_sugar,alcohol,quality)))
+```
+
+## Converting values to numeric
+
+I created a dot plot, thought there was no correlation between residual sugar and alcohol, then realized the y axis started at 9, went to 13, then back to 10 (disaster!). I checked the type of data with the class function and confirmed it was stored as "character."
+
+So, here we turn the alcohol percentage and residual sugar columns into numeric data.
+
+```{r}
+class(red_wine_split$alcohol)
+
+red_wine_split <- red_wine_split %>%
+    mutate(alcohol = as.numeric(alcohol))
+
+red_wine_split <- red_wine_split %>%
+    mutate(residual_sugar = as.numeric(residual_sugar))
+```
+
+### Dot plot
+
+Then we make the dot plot. This dot plot compares residual sugar levels to alcohol percentage. I've also indexed the quality ratings as colors.
+
+```{r}
+ggplot(data = red_wine_split, aes(x = residual_sugar, y = alcohol, color = quality)) + 
+    geom_point()
+```
+
+I love the colors R chose for me.
+
+It doesn't seem like there's much of a correlation between residual sugar and alcohol, given the cluster on the left. It *is* interesting that the wines with a 5 quality rating are clustered closer to the bottom, with a lower alcohol percentages, while the 6s tend to have a higher alcohol percentage.
+
+I asked an expert, who explained (using entirely too many words) that an alcohol percentage \< 15 meant none of these wines are fortified. So, no Port or Madeira in this data set!
+
+## Checking quality ratings
+
+I was also interested in these quality ratings, so I used the count function to see what the distinct quality ratings were. They range from 3-8 in this data set.
+
+```{r}
+red_wine_split |> count((quality))
+```
+
+Then, I sorted from highest to lowest. The most typical quality rating was 5, followed by 6.
+
+```{r}
+red_wine_split |> count(quality, sort = TRUE)
+```
+
+### Bar graph
+
+I graphed this quality data. I originally used color = quality, and it just gave the gray bars a very thin outline, which wasn't very visually interesting. Then I guessed (or it's possible I'd seen this done before) that using "fill" would change the whole bar color, and I was right!
+
+```{r}
+ggplot(data = red_wine_split, aes(x = quality, fill = quality)) + 
+    geom_bar()
+```
+
+## Citations
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed January 28, 2026.
