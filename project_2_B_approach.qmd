@@ -1,0 +1,43 @@
+---
+title: "Project 2 B Approach"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+here's the data set: <https://raw.githubusercontent.com/acatlin/data/refs/heads/master/penguin_predictions.csv>
+
+I will load data set into R. Then, I will Calculate the null error rate by finding out which class is the minority (male vs. female) then dividing minority class by total sample set.
+
+I will create three confusion matrices using an appropraite graphing package (possibly carrot) using probability thresholds of 0.2, 0.5, and 0.8.
+
+I will visualize accuracy, precision, recall, and F1 score for each threshold that I calculated.
+
+I will discuss when a low probability threshold is preferable (more false positives), e.g. during breast cancer screening (mammograms have a lot of false positives) or with a carbon monoxide monitor as opposed to a high probability threshold, when more false negatives are preferable (lower-stakes situations), like with credit card fraud, websites that constantly ask if you are a robot, or subscription services detecting that you're using a VPN.
+
+## Loading the dat aset
+
+```{r}
+library(tidyverse)
+
+penguins_url <- "https://raw.githubusercontent.com/acatlin/data/refs/heads/master/penguin_predictions.csv"
+
+#read and convert blanks and NULL to NA
+
+penguins <- read.csv(penguins_url, na = c("", "NA", "null", "NULL"))
+```
+
+## Null error rate
+
+null error rate by finding out which class is the minority (male vs. female) then dividing minority class by total sample set.
+
+```{r}
+ #checking the count of male and female, the majority class is male, and the total sample size is 93
+penguins |> count(sex)
+
+39/93
+
+#the null error rate is .419 or 41.9%
+```
