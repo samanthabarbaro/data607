@@ -1,0 +1,51 @@
+---
+title: "Project 2"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I've created a table with movie rating data from six definitely real people in SQL. I will create a tidy data frame that reads nulls correctly into R.
+
+I will use the tidyverse to inspect the data, find out how many missing values there are, and find general descriptive statistics (potentially breaking out different facets of data, for example, just superhero movies). I'll find out which movie(s) were seen the most/least, as well as the average rating for each movie. I will also define my approach for null values in this data set (for example, while it might be okay to exclude null values when calculating the average rating for each movie, is this approach acceptable for calculating the average rating for superhero movies in general?).
+
+Data set:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv>
+
+SQL queries that created the data set are available here:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Project_2_queries.sql>
+
+## Loading the data set
+
+```{r}
+library(tidyverse)
+
+sql_url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv"
+
+#read and convert blanks and NULL to NA
+
+movie_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL"))
+
+glimpse(movie_data)
+```
+
+## Converting to a tibble
+
+```{r}
+#converting to tibble
+
+movie_data <- as_tibble(movie_data) 
+
+view(movie_data)
+
+```
+
+### Pivot longer
+
+```{r}
+#this may be required to analyze the data (making the data into a 2-column format)
+```
