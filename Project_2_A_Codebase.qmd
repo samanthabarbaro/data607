@@ -1,0 +1,141 @@
+---
+title: "Project 2"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I've created a table with movie rating data from six definitely real people in SQL. I will create a tidy data frame that reads nulls correctly into R.
+
+I will use the tidyverse to inspect the data, find out how many missing values there are, and find general descriptive statistics (potentially breaking out different facets of data, for example, just superhero movies). I'll find out which movie(s) were seen the most/least, as well as the average rating for each movie. I will also define my approach for null values in this data set (for example, while it might be okay to exclude null values when calculating the average rating for each movie, is this approach acceptable for calculating the average rating for superhero movies in general?).
+
+Data set:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv>
+
+SQL queries that created the data set are available here:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Project_2_queries.sql>
+
+## Loading the data set
+
+```{r}
+library(tidyverse)
+
+sql_url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv"
+
+#read and convert blanks and NULL to NA
+
+movie_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL"))
+
+glimpse(movie_data)
+```
+
+## Converting to a tibble
+
+```{r}
+#converting to tibble
+
+movie_data <- as_tibble(movie_data) 
+
+print(movie_data)
+
+```
+
+### Pivot longer
+
+```{r}
+#this may be required to analyze the data (making the data into a 2-column format)
+
+long_movie_data <- movie_data |> pivot_longer(
+  -viewer,
+  names_to = "movie",
+  values_to = "rating"
+)
+
+#get some descriptive statistics
+summary(long_movie_data)
+
+```
+
+## Approach for NA values
+
+For the purposes of counting which movies were seen the most and determining average ratings, I will remove null values. I don't want to count null values when counting the number of times a movie was seen – this will give me incorrect results, same for treating null ratings as zeroes when determining averages.
+
+### Average rating for each movie
+
+```{r}
+#average rating for each movie (rounding an arranging by avg rating)
+avg_movie <- long_movie_data |>  group_by(movie) |> 
+  summarize(avg_rating = round(mean(rating, na.rm = TRUE), 1)) |> arrange(desc(avg_rating))
+
+print(avg_movie)
+
+#a table without NA values
+
+movies_no_na <- long_movie_data |> 
+    drop_na()
+
+#graph 
+ggplot(data = avg_movie, aes(x = reorder(movie, avg_rating), y = avg_rating, fill = movie)) +
+    geom_col() +
+    coord_flip() +
+    labs(x = "Movie", y = "Average Rating", title = "Average Movie Rating")
+
+```
+
+### Which movies were seen the most?
+
+```{r}
+movies_seen <- long_movie_data |> 
+  group_by(movie) |> 
+  summarize(total_seen = sum(!is.na(rating))) |> 
+  arrange(desc(total_seen))
+
+print(movies_seen)
+
+```
+
+### Who saw the most movies?
+
+```{r}
+by_viewer <- long_movie_data |> 
+    group_by(viewer) |> 
+    summarize(total_watched = sum(!is.na(rating))) |> 
+    arrange(desc(total_watched))
+
+print(by_viewer)
+
+```
+
+### Superhero movies vs. holiday movies movies
+
+```{r}
+#categorizing the  movies as superhero or holiday
+
+avg_movie_categorized <- avg_movie %>%
+    mutate(category = if_else(
+        movie %in% c("the_grinch", "rudolph", "the_holiday", "love_actually"), 
+        "Holiday", 
+        "Superhero"
+    ))
+
+print(avg_movie_categorized)
+
+#plotting average ratings of categorized movies
+#clearly villain movies are the favorite
+
+ggplot(data = avg_movie_categorized, 
+       aes(x = reorder(movie, avg_rating), y = avg_rating, fill = category)) +
+    geom_col() +
+    coord_flip() +
+    # Manually set the colors for categories
+    scale_fill_manual(values = c("Holiday" = "forestgreen", "Superhero" = "steelblue")) +
+    labs(x = "Movie", y = "Average Rating", fill = "Category") +
+    theme_minimal()
+```
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed Feb 6, 2026.
