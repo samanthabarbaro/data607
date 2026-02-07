@@ -1,0 +1,365 @@
+---
+title: "Project 2 B Approach"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+here's the data set: <https://raw.githubusercontent.com/acatlin/data/refs/heads/master/penguin_predictions.csv>
+
+I will load data set into R. Then, I will Calculate the null error rate by finding out which class is the minority (male vs. female) then dividing minority class by total sample set.
+
+I will create three confusion matrices using an appropriate graphing package (possibly carret) using probability thresholds of 0.2, 0.5, and 0.8.
+
+I will visualize accuracy, precision, recall, and F1 score for each threshold that I calculated.
+
+I will discuss when a low probability threshold is preferable (more false positives), e.g. during breast cancer screening (mammograms have a lot of false positives) or with a carbon monoxide monitor as opposed to a high probability threshold, when more false negatives are preferable (lower-stakes situations), like with credit card fraud, websites that constantly ask if you are a robot, or subscription services detecting that you're using a VPN.
+
+## Loading the data aset
+
+```{r}
+library(tidyverse)
+
+penguins_url <- "https://raw.githubusercontent.com/acatlin/data/refs/heads/master/penguin_predictions.csv"
+
+#read and convert blanks and NULL to NA
+
+penguins <- read.csv(penguins_url, na = c("", "NA", "null", "NULL"))
+```
+
+## Exploring the data
+
+```{r}
+ggplot(data = penguins, aes(x = sex, fill = sex)) + geom_bar() + labs (title = "Number of Penguins by Sex")  
+```
+
+## Null error rate
+
+Calculate null error rate by finding out which class is the minority (male vs. female) then dividing minority class by total sample set.
+
+```{r}
+ #checking the count of male and female, the majority class is male, and the total sample size is 93
+penguins |> count(sex)
+
+#the minority class is female (39 penguins vs. 54)
+
+39/93
+
+#the null error rate is .419 or 41.9%
+```
+
+### Creating predictions and confusion matrices
+
+-   Using probability thresholds of **0.2**, **0.5**, and **0.8**, compute:
+
+    -   True Positives (TP)
+
+    -   False Positives (FP)
+
+    -   True Negatives (TN)
+
+    -   False Negatives (FN)
+
+It took me a while to figure out what this question was asking. I repurposed code from later on whern I calculated the actuals (this is gone now; I also realized that TP = correctly predicted female, not the majority class, becuase the probability is predciting whether a penguin is female).
+
+I'm interpreting this as set the threshold or pred_class at (.2, .5, .8) and give the result, then compare to the actual in a confusion matrix.
+
+```{r}
+#for .2
+#predicting for .2
+point_two <- penguins |>
+    mutate(threshold_outcome = case_when(
+        .pred_female >= 0.2 ~ "female",
+        TRUE ~ "male"
+    ))
+#labeling for .2
+
+point_two_labeled <- point_two |>
+    mutate(outcome = case_when(
+        threshold_outcome == "female" & sex == "female" ~ "TP",
+        threshold_outcome == "male"   & sex == "male"   ~ "TN",
+        threshold_outcome == "male"   & sex == "female" ~ "FN",
+        threshold_outcome == "female" & sex == "male"   ~ "FP",
+        TRUE ~ NA_character_  
+    ))
+
+#counting the totals 
+two_totals <- point_two_labeled |> count(outcome, name = "count_outcome") |> arrange(desc(count_outcome))
+
+
+print(two_totals)
+
+#the matrix
+table(Predicted = point_two$threshold_outcome, Actual = point_two$sex)
+
+```
+
+### Calculations for .2
+
+```{r}
+#accuracy | (TP + TN) / total
+(48 + 37)/93
+
+#.914 or 91.4%
+
+#precison | TP / (TP + FP)
+37 / (37+6)
+#.860 or 86.0%
+
+#recall TP / (TP + FN)
+37 / (37 + 2)
+#.949 or 94.9%
+
+#F1 = harmonic mean of precision and recall
+#flip and average (1/.86 + 1/.949 )/2
+#flip back 
+2/(1/.86 + 1/.949 )
+#.902 or 90.2%
+```
+
+### For .5
+
+```{r}
+#for .5
+#predicting for .5
+point_five <- penguins |>
+    mutate(threshold_outcome = case_when(
+        .pred_female >= 0.5 ~ "female",
+        TRUE ~ "male"
+    ))
+#labeling for .5
+
+point_five_labeled <- point_five |>
+    mutate(outcome = case_when(
+       threshold_outcome == "female" & sex == "female" ~ "TP",
+        threshold_outcome == "male"   & sex == "male"   ~ "TN",
+        threshold_outcome == "male"   & sex == "female" ~ "FN",
+        threshold_outcome == "female" & sex == "male"   ~ "FP",
+        TRUE ~ NA_character_  
+    ))
+
+#counting the totals 
+five_totals <- point_five_labeled |> count(outcome, name = "count_outcome") |> arrange(desc(count_outcome))
+
+
+print(five_totals)
+
+#the matrix
+table(Predicted = point_five$threshold_outcome, Actual = point_five$sex)
+
+```
+
+### Calculations for .5
+
+```{r}
+#accuracy | (TP + TN) / total
+(56 + 31)/93
+
+#.935 or 93.5%
+
+#precison | TP / (TP + FP)
+36 / (36+3)
+#.923 or 92.3%
+
+#recall TP / (TP + FN)
+36 / (36 + 3)
+#.992 or 92.2%
+
+#F1 = harmonic mean of precision and recall
+
+2/(1/.923 + 1/.992 )
+#.956 or 95.6%
+```
+
+### For .8
+
+```{r}
+
+#for .8
+#predicting for .8
+point_eight <- penguins |>
+    mutate(threshold_outcome = case_when(
+        .pred_female >= 0.8 ~ "female",
+        TRUE ~ "male"
+    ))
+#labeling for .8
+
+point_eight_labeled <- point_eight |>
+    mutate(outcome = case_when(
+        threshold_outcome == "female" & sex == "female" ~ "TP",
+        threshold_outcome == "male"   & sex == "male"   ~ "TN",
+        threshold_outcome == "male"   & sex == "female" ~ "FN",
+        threshold_outcome == "female" & sex == "male"   ~ "FP",
+        TRUE ~ NA_character_  
+    ))
+
+#counting the totals 
+eight_totals <- point_eight_labeled |> count(outcome, name = "count_outcome") |> arrange(desc(count_outcome))
+
+print(eight_totals)
+
+#the matrix
+table(Predicted = point_eight$threshold_outcome, Actual = point_eight$sex)
+```
+
+### Calculations
+
+```{r}
+#accuracy | (TP + TN) / total
+(52 + 36)/93
+
+#.946 or 94.6%
+
+#precison | TP / (TP + FP)
+36 / (36+2)
+#.947 or 94.7%
+
+#recall TP / (TP + FN)
+36 / (36 + 3)
+#.992 or 92.2%
+
+#F1 = harmonic mean of precision and recall
+
+2/(1/.947 + 1/.992 )
+#.968 or 96.8%
+```
+
+## Creating a better confusion matrix
+
+I didn't love the simple confusion matrix (it's a little confusing), so I asked Gemini to help me make a better one.
+
+```{r}
+#install.packages("yardstick")
+library(yardstick)
+
+#Surprise! This makes exactly the same thing as the little table. 
+
+point_two %>%
+    mutate(
+        sex = as.factor(sex),
+        threshold_outcome = as.factor(threshold_outcome)
+    ) |>
+    conf_mat(truth = sex, estimate = threshold_outcome)
+
+#Then I tried the autoplot, which gave me this beauty
+point_two %>%
+    mutate(
+        sex = as.factor(sex),
+        threshold_outcome = as.factor(threshold_outcome)
+    ) |>
+    conf_mat(truth = sex, estimate = threshold_outcome) |>  autoplot(type = "heatmap")
+
+#I asked gemini to give it some titles and change the color, and it did this. I don't know if I love title.
+
+point_two |>
+  mutate(
+    sex = as.factor(sex),
+    threshold_outcome = as.factor(threshold_outcome)
+  ) |>
+  conf_mat(truth = sex, estimate = threshold_outcome) |>
+  autoplot(type = "heatmap") +
+  # 1. Change the color scale (e.g., "viridis", "magma", or custom)
+  scale_fill_gradient(low = "#e6f2ff", high = "#004466") + 
+  # 2. Fix the labels and add a title
+  labs(
+    title = "Penguin Sex Prediction Results",
+    subtitle = "Threshold set at 0.2",
+    x = "What the Model Predicted",
+    y = "The Actual Truth",
+    fill = "Count"
+  ) +
+  # 3. Clean up the theme
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+#I asked gemini to Change the title to Penguin Confusion Matrix and make matrices for .5 and .8
+
+point_two |>
+  mutate(
+    sex = as.factor(sex),
+    threshold_outcome = as.factor(threshold_outcome)
+  ) |>
+  conf_mat(truth = sex, estimate = threshold_outcome) |>
+  autoplot(type = "heatmap") +
+  scale_fill_gradient(low = "#e6f2ff", high = "#004466") + 
+  labs(
+    title = "Penguin Sex Predictor Confusion Matrix 1",
+    subtitle = "Threshold set at 0.2",
+    x = "What the Model Predicted",
+    y = "The Actual Truth",
+    fill = "Count"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+
+#threshold at .5 
+point_five |>
+  mutate(
+    sex = as.factor(sex),
+    threshold_outcome = as.factor(threshold_outcome)
+  ) |>
+  conf_mat(truth = sex, estimate = threshold_outcome) |>
+  autoplot(type = "heatmap") +
+  scale_fill_gradient(low = "#e6f2ff", high = "#004466") + 
+  labs(
+    title = "Penguin Sex Predictor Confusion Matrix 2",
+    subtitle = "Threshold set at 0.5",
+    x = "What the Model Predicted",
+    y = "The Actual Truth",
+    fill = "Count"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+#I asked for more penguin colors for .8, and it gave me a deeper blue. That would not have been my first choice, but we're going with it.
+
+point_eight |>
+  mutate(
+    sex = as.factor(sex),
+    threshold_outcome = as.factor(threshold_outcome)
+  ) |>
+  conf_mat(truth = sex, estimate = threshold_outcome) |>
+  autoplot(type = "heatmap") +
+  # Using an "Ice & Deep Water" gradient
+  scale_fill_gradient(low = "#F0F8FF", high = "#1B365D") + 
+  labs(
+    title = "Penguin Sex Predictor Confusion Matrix 3",
+    subtitle = "Threshold set at 0.8",
+    x = "What the Model Predicted",
+    y = "The Actual Truth",
+    fill = "Count"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 14, color = "#1B365D"),
+    axis.text = element_text(size = 12, color = "#444444"),
+    # Adding a subtle "ice" colored background to the plot area
+    plot.background = element_rect(fill = "#F9FDFF", color = NA)
+  )
+
+```
+
+### Probability thresholds explained
+
+**A low probability threshold** (more false positives) is preferable in high-stakes situations, like with a carbon monoxide monitor or a mechanism that detects plane engine trouble. It's better to have a monitor that's too sensitive than the alternative.
+
+**A high probability threshold** (more false negatives) is preferable in lower-stakes situations. For example, a streaming service has an algorithm that detects possible VPNs. It's better to have more false negatives (users with VPNs accessing streaming services) than to overcorrect and deny customers services they've paid for.
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed Feb 6 & 7, 2026.
