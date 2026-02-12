@@ -1,0 +1,58 @@
+---
+title: "Project 3 A"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I will use my movie data set from the last project to create a recommendation system. To do this, I will:
+
+-   find the average rating for all movies
+
+-   Find out how the average of every individual movie compares to the overall average
+
+-   Find out how a user's average rating compares to the overall average
+
+-   Using these numbers, predict ratings for movies users haven't seen
+
+-   Provide a recommendatin by recommending the movie they are likely to rate the highest
+
+Data set:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv>
+
+## Loading the data set
+
+```{r}
+library(tidyverse)  
+
+sql_url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv"  
+#read and convert blanks and NULL to NA  
+movie_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL")) 
+
+
+```
+
+## Converting to a tibble
+
+```{r}
+#converting to tibble  
+movie_data <- as_tibble(movie_data)   
+
+print(movie_data) 
+```
+
+### Pivot longer
+
+```{r}
+#this may be required to analyze the data (making the data into a 2-column format)  
+
+long_movie_data <- movie_data |> pivot_longer(   -viewer,   names_to = "movie",   values_to = "rating" )  
+
+#get some descriptive statistics 
+summary(long_movie_data) 
+```
+
+## 
