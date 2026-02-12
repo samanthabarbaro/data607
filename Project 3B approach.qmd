@@ -1,0 +1,18 @@
+---
+title: "Project_3_B"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I created a coffee and tea sales data set. I will use SQL to calculate the 6-day rolling average and the YTD average using window function.
+
+Here's the data set with a check to see if my calculations in SQL are right:
+
+<https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/coffeeteasales.csv>
+
+```{r}
+#some code will go here
+```
