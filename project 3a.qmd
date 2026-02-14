@@ -17,13 +17,15 @@ I will use my movie data set from the last project to create a recommendation sy
 
 -   Using these numbers, predict ratings for movies users haven't seen
 
--   Provide a recommendatin by recommending the movie they are likely to rate the highest
+-   Provide a recommendation by recommending the movie they are likely to rate the highest
 
 Data set:
 
 <https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv>
 
 ## Loading the data set
+
+I loaded the data set and kept some cleaning methods from last week.
 
 ```{r}
 library(tidyverse)  
@@ -47,12 +49,113 @@ print(movie_data)
 ### Pivot longer
 
 ```{r}
-#this may be required to analyze the data (making the data into a 2-column format)  
 
 long_movie_data <- movie_data |> pivot_longer(   -viewer,   names_to = "movie",   values_to = "rating" )  
 
-#get some descriptive statistics 
+#descriptive statistics 
 summary(long_movie_data) 
 ```
 
-## 
+## Adding averages and other calculations
+
+```{r}
+#calculate the average movie score for the entire dataset, and give that its own column
+
+long_movie_data |> summarize(round(mean(rating, na.rm = TRUE), 1))
+
+long_movie_data |> mutate(avg_overall = 3.2)
+
+
+#I will add the average movie rating manually
+#one way to do this -- get every movie's average rating and index with a case satement
+avg_movie_rating <- long_movie_data |>  group_by(movie) |> 
+    summarize(avg_rating = round(mean(rating, na.rm = TRUE), 1))
+
+print(avg_movie_rating)
+
+movie_averages <- long_movie_data |> mutate(avg_overall = 3.2) |>
+    mutate(movie_average = case_when(
+        movie == "iron_man" ~ 2.7,
+        movie == "avengers" ~ 3.0,
+        movie == "birds_of_prey" ~ 4.7,
+        movie == "captain_america" ~ 3.7,
+        movie == "love_actually" ~ 4.0,
+        movie == "rudolph" ~ 3.3,
+        movie == "super_man" ~ 2.5,
+        movie == "the_grinch" ~ 2.0,
+        movie == "the_holiday" ~ 2.3,
+        movie == "the_suicide_squad" ~ 4.0,
+        TRUE ~ NA_real_  
+    ))
+
+```
+
+## Trying something different
+
+At this point, I've introduced a lot of typing and the possibility of human error with my methods. The ratings in the code above are also static and don't update if new ratings are added.
+
+Before I keep going, is there a way to add a column like index/match or hlookup in excel to join these two tables? *Or* is it possible to just calculate the averages for each movie and the general average for all the movies using mutate and skip the step of creating a new table and indexing?
+
+```{r}
+#I added the average in a single column, which worked
+
+new_ratings <- long_movie_data |> mutate(avg_rating = round(mean(rating, na.rm = TRUE), 1))
+
+#And the average for each movie (apparently one can simply ungroup after grouping by ungroup() or .groups = "drop")
+
+new_ratings <- long_movie_data |> 
+    mutate(avg_rating_global = round(mean(rating, na.rm = TRUE), 1)) |>
+    group_by(movie) |> 
+    mutate(avg_rating_movie = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup()
+
+
+#here it is again with two new columns (user average and the difference between the user's average and the overall average). 
+#At this point, I am running out of easily understanable column names.
+
+new_ratings <- long_movie_data |> 
+    mutate(avg_rating_global = round(mean(rating, na.rm = TRUE), 1)) |>
+    group_by(movie) |>
+    mutate(avg_rating_movie = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup() |> 
+    group_by(viewer) |>
+    mutate(viewer_avg = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup() |>
+    mutate(user_diff = viewer_avg - avg_rating_global)
+
+
+print(new_ratings)
+
+```
+
+## Creating a new predicted rating table
+
+This table adds the user_diff column (difference from average rating) to the avg_rating_movie (average of each movie) column if the original rating column shows NA. If the viewer has already seen the movie, the predicted rating is NA.
+
+```{r}
+predicted_ratings <- new_ratings |> mutate(predicted_rating = (ifelse(is.na(rating), user_diff + avg_rating_movie, NA)))
+
+glimpse(predicted_ratings)
+
+print(predicted_ratings |> select(viewer, movie, rating, avg_rating_movie, user_diff, predicted_rating))
+```
+
+### Finally, the predictions
+
+```{r}
+#predicting everyone's next movie by slicing the max for each viewer and keeping the movie column
+
+next_movie <- predicted_ratings |> group_by(viewer) |> slice_max(predicted_rating, n = 1, with_ties = FALSE) |> ungroup() |> select(viewer, movie, predicted_rating)
+
+
+print(next_movie)
+
+#According to this table, someone will give Birds of Prey more than 5 stars
+
+#After seeing this, I thought about whether setting a max for the predicted rating column makes sense and concluded that it does not.
+#Someone might be a high rater, and you want recommend the movie they'd likely give the absolute highest rating to, even if that rating is out of bounds.
+
+```
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed Feb 13, 2026.
