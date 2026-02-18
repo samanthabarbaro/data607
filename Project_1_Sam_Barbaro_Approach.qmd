@@ -1,0 +1,90 @@
+---
+title: "Project_1"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I will import the text file from Github, use \| as a delimiter remove dashes, pivot wider so the two rows for each player are aligned, clean the data, and calculate the new number that references other opponents' ranks.
+
+## Importing the data
+
+```{r}
+library(tidyverse)
+
+
+
+new_data <- read.table("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/chess.txt", sep = "|", row.names = NULL, fill = TRUE)
+
+#Can I drop blanks? (I tried this first wiht == "" and it didn't work)
+
+filtered_new_data <- subset(new_data, V2 != "")
+```
+
+## Attempting to add labels and pivot wider
+
+```{r}
+#add labels and then pivot wider
+#I need to add a repeating row to the left side (e.g., 1, 2) and then use those to pivot the data wider
+
+filtered_new_data <- filtered_new_data |>
+    mutate(new_col = rep(c(1, 2), length.out = n())) |> 
+    mutate(second_new_col = rep(c(3,4), length.out = n())) |> 
+    mutate(third_new_col = rep(c(5,6), length.out = n())) |> 
+    mutate(fourth_new_col = rep(c(7,8), length.out = n())) |> 
+    mutate(fifth_new_col = rep(c(9,10), length.out = n())) |> 
+    mutate(sixth_new_col = rep(c(11,12), length.out = n())) |> 
+    mutate(seventh_new_col = rep(c(13,14), length.out = n())) |> 
+    mutate(eighth_new_col = rep(c(15,16), length.out = n())) |> 
+    mutate(ninth_new_col = rep(c(17,18), length.out = n())) |> 
+    mutate(tenth_new_col = rep(c(19,20), length.out = n()))
+  
+
+#select - at this point, we only need cols 1-3 and the new column
+
+chess_data <- filtered_new_data 
+#|
+#|#> select(new_col, V1, second_new_col, V2, third_new_col, V3)
+
+
+#I tried a lot of pivoting wider and got a lot of null values, and then realized that every player (their two columns) needed a unique ID to THEN pivot longer
+```
+
+## Breaking columns up and adding labels
+
+```{r}
+
+final_chess <- chess_data |>
+  mutate(person_id = rep(1:(n()/2), each = 2)) |>
+  pivot_wider(
+    id_cols = person_id,
+    names_from = c(new_col, second_new_col, third_new_col, fourth_new_col, fifth_new_col, sixth_new_col, seventh_new_col, eighth_new_col, ninth_new_col, tenth_new_col),
+    values_from = c(V1, V2, V3, V4, V5, V6, V7, V8, V9, V10)
+  )
+  
+print(final_chess)
+  
+#let's clean up the names
+
+more_final_chess <- final_chess |> select(player_id = V1_1_3_5_7_9_11_13_15_17_19, hometown = V1_2_4_6_8_10_12_14_16_18_20, player_name = V2_1_3_5_7_9_11_13_15_17_19, ranks = V2_2_4_6_8_10_12_14_16_18_20, total_pts = V3_1_3_5_7_9_11_13_15_17_19, first_opp = V4_1_3_5_7_9_11_13_15_17_19, second_opp = V5_1_3_5_7_9_11_13_15_17_19, third_opp = V6_1_3_5_7_9_11_13_15_17_19, fourth_opp = V7_1_3_5_7_9_11_13_15_17_19, fifth_opp = V8_1_3_5_7_9_11_13_15_17_19, sixth_opp = V9_1_3_5_7_9_11_13_15_17_19, seventh_opp = V10_1_3_5_7_9_11_13_15_17_19)
+
+
+#parse out ranks 
+#there is a p + numbers on some ranks that I may have to get rid of
+
+separated_chess <- more_final_chess |>
+    separate(col = ranks, into = c("USCF_ID", "scores"), sep = "/") |> separate(col = scores, into = c("pre_rank", "post_rank"), sep = "->") |> slice(-1)
+
+
+#Let's delete some strings
+#there were hidden spaces here and NAs weren't showign, so I used str_trim
+del_chess <- separated_chess|>
+  mutate((across(ends_with("_opp"), ~ str_sub(.x, start = 3))), pre_rank = str_sub(pre_rank, start = 4), across(everything(), ~ str_trim(.x) |> na_if("")))
+
+
+
+
+
+```
