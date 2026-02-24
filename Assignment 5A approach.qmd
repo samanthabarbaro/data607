@@ -1,0 +1,28 @@
+---
+title: "Assignment 5A"
+author: "Samantha Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I will create a CSV file comparing the arrival times and delays of two superb airlines, Southwest and Spirit, using a data structure that is wide (similar to Southwest's seats).
+
+Then, I will upload the data set to R in a reproducible way without moving NAs or tidying the data on upload. After that, I will populate the missing data with NA (or whatever is relevant for this data set).
+
+I will analyze and compare the arrival delays for the two airlines. This will involve:
+
+-   Creating a tibble (formatting columns as numeric as needed)
+-   Pivoting the data longer
+-   Comparing arrivals and delays for the two airlines, summarizing data using both counts and percentages
+-   Including at least one data visualization
+-   Commenting extensively, detailing my journey while cleaning this data
+
+Here is the data set: <https://raw.githubusercontent.com/samanthabarbaro/data607/fa10101ed55521a4083f04bdebeca13fbda875ca/flightdelays.csv>
+
+```{r}
+library(tidyverse)
+
+flight_set <- read.table("https://raw.githubusercontent.com/samanthabarbaro/data607/fa10101ed55521a4083f04bdebeca13fbda875ca/flightdelays.csv", sep = ",")
+```
