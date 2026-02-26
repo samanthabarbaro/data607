@@ -1,0 +1,28 @@
+---
+title: "Assignment 5 B Approach"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Assignment 5B Approach
+
+I will pick up where I left off in project one and incorporate the results of of the match into my final data frame.
+
+I will calculate the player's total expected score (probability of winning, as calculated below, across all games) and the difference from their actual score (calculated as 1 pt for winning, .5 for a draw, 0 for a loss). Then, I'll list the five players who most overperformed relative to their expected score (highest difference between their expected and actual), and the five players that most underperformed relative to their expected score (lowest difference between expected and actual).
+
+Formulas are as follows:
+
+new rating after a game = rating + 32(score - expected score)
+
+players score 1 pt for winning, .5 for a draw, 0 for a loss (this is computed into the above formula)
+
+expected score = probability they will win
+
+Probability of player a winning = 1/1+10 \^((Rating of player a - Rating of player b)/400)
+
+```{r}
+
+#Here's the original txt file. TBD how much of the code I will import into this file (it may be quite a bit, since after a certain point I left off the wins and losses, as it wasn't required for the final spreadsheet).
+new_data <- read.table("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/chess.txt", sep = "|", row.names = NULL, fill = TRUE)
+```
