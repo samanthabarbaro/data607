@@ -1,0 +1,174 @@
+---
+title: "Assignment 5 B Codebase"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Assignment 5B Approach
+
+I will pick up where I left off in project one and incorporate the results of of the matches into my final data frame.
+
+I will calculate the player's total expected score (probability of winning, as calculated below, across all games) and the difference from their actual score (calculated as 1 pt for winning, .5 for a draw, 0 for a loss). Then, I'll list the five players who most overperformed relative to their expected score (highest difference between their expected and actual), and the five players that most underperformed relative to their expected score (lowest difference between expected and actual).
+
+Formulas are as follows:
+
+new rating after a game = rating + 32(score - expected score)
+
+players score 1 pt for winning, .5 for a draw, 0 for a loss (actual score)
+
+expected score = probability they will win
+
+Probability of player a winning = 1/1+10 \^((Rating of player a - Rating of player b)/400) or 1/1+10 \^((Rating of player a - Rating of player b)/400)
+
+```{r}
+
+library(tidyverse)
+
+#Here's the original txt file. I kept/changed some of the cleaning from project 1, since the resulting data frame will be somewhat different. 
+
+new_data <- read.table("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/chess.txt", sep = "|", row.names = NULL, fill = TRUE)
+
+filtered_new_data <- subset(new_data, V2 != "")
+
+filtered_new_data <- filtered_new_data |>
+    mutate(new_col = rep(c(1, 2), length.out = n())) 
+
+#pivot wider to get players on the same line as their stats
+
+final_chess <- filtered_new_data |>
+  mutate(person_id = rep(1:(n()/2), each = 2)) |>
+  pivot_wider(
+    id_cols = person_id,
+    names_from = c(new_col),
+    values_from = c(V1, V2, V3, V4, V5, V6, V7, V8, V9, V10)
+  )
+```
+
+##  Cleaning the data
+
+```{r}
+#delete the first row here, because that is going to be a mess after a pivot
+
+#name the columns by number so it's easy to convert them to numeric later if needed, and there's no messy first_opp, second_opp, etc. 
+more_final_chess <- final_chess |> select(player_id = V1_1, hometown = V1_2, player_name = V2_1, ranks = V2_2, total_pts = V3_1, "1" = V4_1, "2" = V5_1, "3" = V6_1, "4" = V7_1, "5" = V8_1, "6" = V9_1, "7" = V10_1) |>
+  slice(-1)
+
+#pivot longer with the result and opponent number still together
+
+chess_long_scores <- more_final_chess |>
+    pivot_longer(
+        cols = !player_id:total_pts,
+        names_to = "round",
+        values_to = "result_and_opp"
+    )
+
+#cleaning and breaking up the columns
+
+separated_chess_w_scores <- chess_long_scores |>
+    separate(col = ranks, into = c("USCF_ID", "scores"), sep = "/") |> 
+  separate(col = scores, into = c("pre_rank", "post_rank"), sep = "->") |>
+  separate(col = result_and_opp, into = c ("result", "opp_num"), sep = "  ")
+
+#getting rid of the p + numbers in the ranks and other unecessary lettre
+
+cleaned_chess_scores <- separated_chess_w_scores|>
+    mutate(pre_rank = str_sub(pre_rank, start = 4), across(everything(), ~  str_trim(.x) |> na_if(""))) |> 
+    mutate(pre_rank = str_remove(pre_rank, "P.*")) |> 
+    mutate(post_rank = str_remove(post_rank, "P.*")) |>
+    mutate(player_name = str_to_title(player_name))
+
+
+```
+
+### Joining and pivoting
+
+```{r}
+#reference table
+
+ref_tab <- cleaned_chess_scores |> 
+  select(player_id, opp_rank = pre_rank) |> 
+  distinct(player_id, .keep_all = TRUE)
+
+#join 
+#I did not drop NAs here because I wanted to include scores for byes
+
+chess_scores_joined <- cleaned_chess_scores |>
+    left_join(ref_tab, by = c("opp_num" = "player_id"))
+
+
+#format as tibble
+chess_scores_joined <- as_tibble(chess_scores_joined)
+
+#make scores numeric
+
+chess_scores_joined <- chess_scores_joined |> 
+  mutate(across(c(pre_rank, post_rank, total_pts, opp_rank), as.numeric))
+```
+
+## The math
+
+```{r}
+#calculating the expected score
+# 1/1+10 ^((Rating of player a - Rating of player b)/400)
+chess_expected_score <- chess_scores_joined |>
+  mutate(exp_score = round(1 / (1 + 10^((opp_rank - pre_rank) / 400)), 4))
+
+
+#case when to determine actual score
+#there are two new variables here -- actual_pts includes a score for byes and score_difference does not
+#I wanted to verify the total score number already in the sheet, which includes byes, and create a column that only includes scores that go toward the player's rank.
+chess_actuals <- chess_expected_score |>
+  mutate(actual_pts = case_when(
+  result == "W" ~ 1,
+  result == "B" ~ 1,
+  result == "D" ~ .5,
+  result == "H" ~ .5,
+  result == "L" ~ 0,
+)) |> mutate(score_difference = actual_pts - exp_score) |>
+   mutate(total_wo_bye = case_when(
+  result == "W" ~ 1,
+  result == "D" ~ .5,
+  result == "L" ~ 0,
+))
+
+#This wasn't required, but I wanted to calculate points gained
+#new rating after a game = rating + 32(score - expected score) 
+
+new_rating <- chess_actuals |> 
+  mutate(new_pts = (32 * score_difference))
+
+
+#sum everything
+
+sum_chess <- new_rating |> 
+  group_by(across(player_id:total_pts)) |> 
+  summarise(
+    across(c(exp_score, actual_pts, score_difference, new_pts, total_wo_bye), 
+           \(x) sum(x, na.rm = TRUE)),
+    .groups = "drop"
+  ) |>
+  mutate(new_rank_calculated = (round(new_pts + pre_rank)))
+
+#at this point I realized that some people had an H and received .5 points for an H (half-point bye), and people with a B received 1 pt, but that does not factor into their ELO ranking. I went back and left NAs in so point calculations reflected the total already in the table. I added the total_wo_by column to check (this is the number that factored into the actual calculations -- byes don't result in points added to a rating). 
+#I also calculated the new rankings and, after extensive checking, concluded that this rating system must be slightly different from the standard. They might have used a different K factor instead of 32. 
+
+
+#arrange by player number:
+sum_chess_2 <- sum_chess |> mutate(player_id = as.numeric(player_id)) |> arrange(player_id) |> select(player_id:exp_score, total_wo_bye, score_difference)
+
+
+#five players that most underperformed relative to their expected score (lowest difference between expected and actual).
+bottom_five <- sum_chess_2 |> arrange(score_difference) |> slice(1:5)
+
+glimpse(bottom_five)
+print(bottom_five)
+#five players who most overperformed relative to their expected score (highest difference between their expected and actual)
+top_five <- sum_chess_2 |> arrange(desc(score_difference)) |> slice(1:5)
+
+glimpse(top_five)
+print(top_five)
+
+```
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].https://gemini.google.com. Accessed Feb 13, 2026.
