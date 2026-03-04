@@ -1,0 +1,57 @@
+---
+title: "Project 3"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Project 3 Approach
+
+I will take three untidy, wide data sets shared by my classmates, including theaverage precipitation by city:
+
+<https://en.wikipedia.org/wiki/List_of_cities_by_average_precipitation>
+
+Disney parks monthly attendance, and field goal career stats from NFL statistics <https://www.kaggle.com/datasets/kendallgillies/nflstatistics> (The third one may be too clean to begin wiht and I may switch it out)
+
+For each data set, I will:
+
+-   Reshape data from wide to tidy (long) format, using pivot longer
+
+-   Normalize the variable structure (e.g., all numeric, same number of decimals)
+
+-   Rename variables to follow a consistent naming convention
+
+-   Address missing or inconsistent values
+
+-   Document how I handle missing values
+
+    ### Planned analysis
+
+For **cities by average precipitation**, I will compare seasonal precipitation patterns across cities in the same country, and to find the rainiest and driest cities overall. I will also compare average rainfall across regions. I will also add country via join.
+
+For the **Disney Parks data** I willl look at monthly attendance to identify peak/low travel seasons, compare FL and CA attendance, and calculate YTD totals for each park. I will also visualize monthly attendance across parks. I have added additional parks (Animal Kingdom and Calinfornia Adventure) to compare all CA parks to all FL parks.
+
+With the football data set, I will look at cumulative player stats, ratios, and the relationship of certain stats (such as player height and weight) relate to career length.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+## Load the data sets
+
+```{r}
+#disney parks
+disney_parks <- 
+  read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/disney_parks_monthly_attendance.csv", 
+                          na.strings = c("", "NA", "null", "NULL"), 
+                          header = TRUE)
+
+
+#NFL field goals
+field_goal <-  read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Career_Stats_Field_Goal_Kickers.csv", 
+                          na.strings = c("", "--", "NA", "null", "NULL"), 
+                          header = TRUE)
+
+rainfall <- read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/rainfallbycity.csv", na.strings = "", header = TRUE)
+```
