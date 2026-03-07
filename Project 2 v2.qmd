@@ -1,0 +1,561 @@
+---
+title: "Project 2"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Project 3 Approach
+
+I will take three untidy, wide data sets shared by my classmates, including the average precipitation by city:
+
+<https://en.wikipedia.org/wiki/List_of_cities_by_average_precipitation>
+
+Disney parks monthly attendance, and field goal career stats from NFL statistics <https://www.kaggle.com/datasets/kendallgillies/nflstatistics>
+
+For each data set, I will:
+
+-   Reshape data from wide to tidy (long) format, using pivot longer
+
+-   Normalize the variable structure (e.g., all numeric, same number of decimals)
+
+-   Rename variables to follow a consistent naming convention
+
+-   Address missing or inconsistent values
+
+-   Document how I handle missing values
+
+    ### Planned analysis
+
+For **cities by average precipitation**, I will compare seasonal precipitation patterns across cities in the same country, and to find the rainiest and driest cities overall.
+
+For the **Disney Parks data** I willl look at monthly attendance to identify peak/low travel seasons, compare FL and CA attendance, and calculate YTD totals for each park. I will also visualize monthly attendance across parks. I have added additional parks (Animal Kingdom and Calinfornia Adventure) to compare all CA parks to all FL parks.
+
+With the **football** data set, I will look at cumulative player stats, ratios, and the relationship of certain stats (such as player height and weight) relate to career length.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+## Load the data sets
+
+```{r}
+#disney parks
+disney_parks <- 
+  read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/disney_parks_monthly_attendance.csv", 
+                          na.strings = c("", "NA", "null", "NULL"), 
+                          header = TRUE)
+
+
+#NFL field goals
+field_goal <-  read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Career_Stats_Field_Goal_Kickers.csv", 
+                          na.strings = c("", "--", "NA", "null", "NULL"), 
+                          header = TRUE)
+#rainfall
+rainfall <- read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/rainfallbycity.csv", na.strings = "", header = TRUE)
+```
+
+### Disney Parks
+
+Let's standardize the values before we pivot longer. I think it will be easier to remove the M/Millions from these columns and say number of guests (in millions), then divide the other columns (which have values in millions) by a million.
+
+```{r}
+#format feb and april 2025 values as numeric, remove commas, and place data in the same format (millions) as other columns before pivoting
+
+disney_parks2 <- disney_parks |> 
+  mutate(Apr_2025 = (Apr_2025/1000000)) |>
+  mutate(Feb.25 = str_remove_all(Feb.25, ",")) |>
+  mutate(Feb.25 = (as.numeric(Feb.25))) |>
+  mutate(Feb.25 = (Feb.25/1000000))
+
+
+#normalize the column names
+
+disney_parks3 <- disney_parks2 |>
+  rename_with(~ format(my(paste(., "2025")), "%b-%Y"),
+    .cols = c(March, May, Jun, July, Aug, Sept, Nov, Dec)
+  ) |> 
+  rename("Jan-2025" = Jan.25, "Feb-2025" = Feb.25, "Oct-2025" = Oct.25, "Apr-2025" = Apr_2025) 
+
+
+```
+
+```{r}
+#getting rid of M and million
+disney_parks4 <- disney_parks3 |> 
+mutate(
+    across(`May-2025`:`Dec-2025`, ~ str_remove(.x, "M.*"))) |> 
+    mutate(`Mar-2025` = str_remove(`Mar-2025`, " m.*")) |>
+  mutate(`Jan-2025` = str_remove(`Jan-2025`, "M.*")) |>
+  mutate(`Jan-2025` = str_remove(`Jan-2025`, "K.*"))
+
+#Resolving problems I created for myself (I am rounding the first value to one million, since all other values are in multiples of 100k)
+disney_parks4[4, 2] <- 1
+disney_parks4[5, 2] <- .8
+
+#there's an NA value for one day at one of the parks. 
+#I've decided to impute using the closest month (Dec 2025 - every park has the same attendance + 100k)
+#I recognize this is the most scientific, but it's only one value and will cause 
+#the least disruption when looking at time series.
+#We also have no reason to believe the park was closed that month. 
+
+disney_parks4[4, 6] <- 1.4
+
+#format  everything as numeric
+disney_parks5 <- disney_parks4 |>
+  mutate(across(`Jan-2025`:`Dec-2025`, as.numeric))
+
+
+#pivot longer
+
+disney_parks6 <- disney_parks5 |> pivot_longer(cols = `Jan-2025`:`Dec-2025`,
+                               names_to = "month_year",
+        values_to = "attendance_in_millions"
+    )
+
+#format as dates
+disney_parks7 <- disney_parks6 |> 
+  mutate(month_year = my(month_year)) |> 
+  rename("park" = Park.Name, "state" = Region)
+```
+
+### Analysis - Disney Parks
+
+```{r}
+library(fpp3)
+
+disney_parks8 <- disney_parks7 |> 
+  as_tsibble(key = park, index = month_year)
+
+autoplot(disney_parks8) + 
+  labs(title = "Disney Park Attendance by Month", x = "Month", y = "Attendance in Millions")
+
+#We can see the summer and holiday peaks, which are fairly consistent across parks
+
+#comparing monthly average attendance in California vs. Florida
+
+disney_parks_regional <- disney_parks7 |> 
+  group_by(state) |>
+  summarize(avg_monthly_park_attendance = round(mean(attendance_in_millions),2))
+
+
+
+library(gt)
+
+disney_parks_regional |>
+  select(state, avg_monthly_park_attendance) |>
+  gt() |>
+  cols_label(
+    state = "Location",
+    avg_monthly_park_attendance = "Average Visitors by Park (Millions)"
+  ) |>
+  tab_header(title = "California vs. Florida Monthly Visitors")
+
+
+#Florida and California by month
+
+disney_parks_regional_monthly <- disney_parks7 |> 
+  group_by(state, month_year) |> 
+  summarize(avg_monthly_park_attendance = round(mean(attendance_in_millions),2))
+
+#A somewhat Disney-looking graph
+
+ggplot(disney_parks_regional_monthly, aes(x = month_year, y = avg_monthly_park_attendance, color = state)) +
+  geom_line() +  
+  scale_color_manual(values = c(
+    "#FF8C00", 
+    "#008080",
+    "#FF4466", 
+    "#FFD700"  
+  )) +
+  geom_point(shape = 8, size = 3) + 
+  theme_minimal() +
+  labs(title = "Average Monthly Disney Park Attendance", 
+       x = "Date", 
+       y = "Average Attendance per Park (Millions)") + theme(
+    plot.title = element_text(size = 20)
+  )
+
+#Florida consistently has a higher avg park attendance 
+
+#this plot also makes seasonality easier to see - attendance climbs throughout the year
+#until August (which I always thought was kind of hot for a Florida visit)
+#It then drops off and peaks again in December for the holidays. 
+
+#Let's look at overall volume
+
+disney_parks_overall_attendance <- disney_parks7 |> 
+  group_by(state, month_year) |>
+  summarize(total_monthly_park_attendance = (sum(attendance_in_millions)))
+
+ggplot(disney_parks_overall_attendance, aes(x = month_year, y = total_monthly_park_attendance, color = state)) +
+  geom_line(size = 1) +
+  geom_point(shape = 8, size = 7) +
+  scale_color_manual(values = c(
+    "#FF8C00", 
+    "#008080",
+    "#FF4466", 
+    "#FFD700"  
+  )) +
+  theme_minimal() +
+  labs(title = "Total Monthly Disney Park Attendance by State", 
+       x = "Date", 
+       y = "Attendance (Millions)")
+
+#Of course, FL has much higher attendance overall because it has 3 more parks
+
+#YTD totals for each park
+disney_parks_yearly <- disney_parks7 |> 
+  group_by(park) |>
+  summarize(yearly_attendance = (sum(attendance_in_millions))) |>
+  arrange(desc(yearly_attendance))
+
+disney_parks_yearly |>
+  select(park, yearly_attendance) |>
+  gt() |>
+  cols_label(
+    park = "Park",
+    yearly_attendance = "Total Guests (Millions)"
+  ) |>
+  tab_header(title = "2025 Attendance by Park")
+
+#The most popular park was Magic Kingdom and the least popular park was Hollywood Studios
+```
+
+## Rainfall
+
+First, add a continent and delete the extra lines
+
+```{r}
+#note - this first column imports into R as X....City, 
+#however, the html would not render.
+#so I rendered a glimpse of this table in a separate file, and it's just "City"
+#I've changed the code below so it renders properly
+#however, for this to run locally, it may need to be changed
+#code is provided below
+
+rainfall2 <- rainfall |> 
+  select(City:Dec) |>
+  mutate(continent = "") |>
+  rename(city = City, country = Country, yearly = Year)
+
+
+#If the above code does not run, please use this 
+#(with the corrected first column name)
+#rainfall2 <- rainfall |> 
+#  select(X...City:Dec) |>
+#  mutate(continent = "") |>
+#  rename(city = X...City, country = Country, yearly = Year)
+
+#1-37 is Africa, 92 - 129 is Asia, 131 - 270 is Europe, 272 - 305 is North America, 311 - 362 is Oceania, 365 - 535 is South America
+#adding a continent column
+
+rainfall2$continent[1:37] <- "Africa"
+rainfall2$continent[40:90] <- "Asia"
+rainfall2$continent[92:129] <- "Asia"
+rainfall2$continent[131:270] <- "Europe"
+rainfall2$continent[272:305] <- "North America"
+rainfall2$continent[311:362] <- "Oceania"
+rainfall2$continent[365:535] <- "South America"
+
+#delete blank spaces in the continent column
+
+
+rainfall_no_blanks <- subset(rainfall2, continent != "")
+
+#getting rid of duplicated header columns
+
+
+rainfall_no_blanks_2 <- subset (rainfall_no_blanks, city != "City")
+```
+
+### Pivoting longer
+
+```{r}
+
+
+rainfall_pivot <- rainfall_no_blanks_2 |>
+  pivot_longer(cols = Jan:Dec,
+                               names_to = "month",
+                               values_to = "rainfall_mm"
+  
+)
+
+
+#reorder so continent comes earlier 
+#get rid of commas (they are causing big problems)
+
+rainfall_cleaned <- rainfall_pivot |> relocate(continent, .after = country) |>
+  mutate(yearly = str_remove(yearly, ",")) |>
+  mutate(rainfall_mm = str_remove(rainfall_mm, ","))
+
+
+#changing the numbers to numeric (they're characters now)
+rainfall_cleaned_numeric <- rainfall_cleaned |>
+  mutate(yearly = as.numeric(yearly), rainfall_mm = as.numeric(rainfall_mm)) |>
+  mutate(across(c(yearly, rainfall_mm), ~replace_na(., 0)))
+
+#one city was broken up (it has a hyphen), so let's fix that
+
+rainfall_cleaned_numeric <- rainfall_cleaned_numeric |>
+  mutate(city = str_replace(city, "Petropavlovsk-", "Petropavlovsk-Kamchatsky")) |>
+  filter(city != "Kamchatsky")
+
+#make R recognize month as a series of months
+rainfall_cleaned_numeric <- as_tibble(rainfall_cleaned_numeric) |>
+  mutate(month = month(parse_date_time(month, "b"), label = TRUE))
+```
+
+### Rainfall analysis
+
+For **cities by average precipitation**, I will compare seasonal precipitation patterns across cities in the same country, and find the rainiest and driest cities overall.
+
+```{r}
+#find the max yearly rainfall and the max monthly rainfall 
+
+rainiest_month <- rainfall_cleaned_numeric |> 
+  arrange(desc(rainfall_mm)) |>
+  slice(1)
+
+
+#The rainiest documented month is July in Mawsynram, India. 
+
+rainiest_month
+
+rainiest_city <- rainfall_cleaned_numeric |> 
+  arrange(desc(yearly)) |>
+  slice(1)
+
+#The rainiest city overall is Lopez de Micay, Colombia with avg 15992 mm rain a year
+
+rainiest_city
+#let's find the 5 rainiest cities in the US and look at a time plot of their precipitation  
+#Having Hawaiian cities as part of Oceania is not an error -- that's how the 
+#data showed up in Wikipedia, and I left it because continents are kind of subjective
+
+us_rain <- rainfall_cleaned_numeric |> 
+  filter(country == "United States") |> 
+  arrange(desc(yearly)) 
+
+us_rain_top_5 <- us_rain |> 
+  filter(country == "United States") |>
+  filter(city %in% c("Hilo", "Miami", "Nashville", "New York City", "Atlanta")) |>
+  arrange(desc(yearly)) 
+
+#there are 21 US cities total in this data set
+print(us_rain |> distinct(city), n= 21)
+
+#time plot
+
+ggplot(us_rain_top_5, aes(x = month, y = rainfall_mm, group = city, color = city)) +
+  geom_line() +
+  geom_point(shape = 6, size = 2) +
+  theme_minimal() +
+  labs(title = "Average Monthly Rainfall by US City",
+       x = "Month",
+       y = "Rainfall (mm)")
+
+#NY, Nashville, and Atlanta all have relatively steady precipitation throughout the year
+#According to this data set, NYC is rainier than Portland and Seattle 
+
+#bottom five
+
+us_rain <- rainfall_cleaned_numeric |> 
+  filter(country == "United States") |> 
+  arrange(yearly) 
+
+us_rain_bottom_5 <- us_rain |> 
+  filter(country == "United States") |>
+  filter(city %in% c("Phoenix", "San Diego", "Los Angeles", "Denver", "Honolulu")) |>
+  arrange(desc(yearly)) 
+
+ggplot(us_rain_bottom_5, aes(x = month, y = rainfall_mm, group = city, color = city)) +
+  geom_line() +
+  geom_point(shape = 6, size = 2) +
+  theme_minimal() +
+  labs(title = "Average Monthly Rainfall by US City (Driest Cities)",
+       x = "Month",
+       y = "Rainfall (mm)")
+
+#With the exception of Denver, many of these lines have a U shape, indicating higher rainfall in winter months
+
+#let's look at average rainfall by city
+
+us_rain_avg <- rainfall_cleaned_numeric |> 
+  filter(country == "United States") |> 
+  group_by(city) |>
+  summarize(monthly_avg = round(mean(rainfall_mm),2))
+
+
+#this table showcases the wide range of avg. monthly rainfalls in the U.S. 15.19 - 255 mm
+
+us_rain_avg |>
+  gt() |>
+  cols_label(
+    city = "City",
+    monthly_avg = "Average Monthly Rainfall"
+  ) |>
+  tab_header(title = "Average Monthly Rainfall in 21 U.S. Cities")
+```
+
+## Football stats
+
+```{r}
+
+#Let's start by breaking up first name and last name
+
+fg_names <- field_goal |>
+    separate(col = Name, into = c("last_name", "first_name"), sep = ",")
+
+#Pivot longer -- get rid of the percentage (we can calculate that if we need it)
+#and  turn the columns into field goal type, made, and attempted
+#this is a hard data set to pivot longer because many of the stats are unrelated 
+#(we don't want extra points mixed in with field goals or total field goals mixed in 
+#with field goal length + number made)
+
+#there's also the question of whether we need the data not being pivoted.
+#Besides identifiers, like name and team, every statistic except extra points
+#can easily be derived from the pivoted data
+
+fg_keep <- fg_names |> 
+  select(Player.Id:FG.Percentage, FGs.Made.20.29.Yards, FGs.Attempted.20.29.Yards, FGs.Made.30.39.Yards, FGs.Attempted.30.39.Yards, FGs.Made.40.49.Yards, FGs.Attempted.40.49.Yards, FGs.Made.50..Yards, FGs.Attempted.50..Yards, Extra.Points.Attempted, Extra.Points.Made, Extra.Points.Blocked) 
+
+fg_keep2 <- fg_keep |>
+  mutate(across(contains(c("Yards", "Extra.Points")), as.numeric))
+
+fg_long <- fg_keep2 |> 
+    pivot_longer(
+        cols = contains("Yards"),
+        names_to = c(".value", "field_goal_type"),
+        names_pattern = "FGs\\.(Made|Attempted)\\.(.*)"
+    )
+
+#make this more readable
+fg_cleaned <- fg_long |> 
+  mutate(field_goal_type = case_when(
+  field_goal_type == "20.29.Yards" ~ "20-29 yards",
+  field_goal_type == "30.39.Yards" ~ "30-39 yards",
+  field_goal_type == "40.49.Yards" ~"40-49 yards",
+  field_goal_type == "50..Yards" ~ "50 yards")
+)
+
+#clean up the names
+
+fg_renamed <- fg_cleaned |> rename_with(tolower)
+
+#replace period with underscore 
+colnames(fg_renamed) <- gsub(pattern = "\\.", replacement = "_", x = colnames(fg_renamed))
+
+#move first name and last name so they're in the right order
+
+fg_renamed <- fg_renamed |> relocate(last_name, .after = first_name)
+```
+
+### Analysis 
+
+I said I would look at cumulative player stats ratios (these are already included in the data set), and how the relationship of certain stats (such as player height and weight) relate to career length (these are excluded from the data set).
+
+Instead, let's look at how likely players are in general to make a field goal based on distance (total \# of field goals / total attempted, grouped by type) and visualize it in a table.
+
+Then, we'll look at the top 5 teams in terms of field goals and field goal percentage.
+
+```{r}
+fg_likelihood <- fg_renamed |> 
+  mutate(across(c(made, attempted), as.numeric)) |> 
+  group_by(field_goal_type) |> 
+  summarize(
+    made = sum(made, na.rm = TRUE), 
+    attempted = sum(attempted, na.rm = TRUE)
+  )
+
+fg_likelihood <- fg_likelihood |> 
+  mutate(percentage_made = round(made / attempted, 2))
+
+#make a table
+#Unsurprisingly, the farther a kicker is from the goal posts, the lower the percentage
+
+fg_likelihood |>
+  select(field_goal_type, percentage_made) |>
+  gt() |>
+  cols_label(
+    field_goal_type = "Distance",
+    percentage_made = "Percentage Made (%)"
+  ) |>
+  tab_header(title = "Percentage of Field Goals Made by Distance")
+
+ggplot(data = fg_renamed, aes(x = attempted, y = made, color = field_goal_type)) + geom_point()
+
+#dot plot visualizing total games played and number of field goals
+
+
+#there are some baseball teams in here and defunct teams with 0 FGs, 
+#so let's filter those out too, and then go with the top 5 teams.
+
+by_team <- fg_renamed |> group_by(team) |> 
+  mutate(across(c(made, attempted), as.numeric)) |>
+  summarize(
+    made = sum(made, na.rm = TRUE), 
+    attempted = sum(attempted, na.rm = TRUE)
+  ) |>
+  filter(attempted != 0) |>
+  arrange(desc(made))
+ 
+
+by_team |>
+   slice(1:5) |>
+  select(team, made) |>
+  gt() |>
+  cols_label(
+    team = "NFL Team",
+    made = "Total Field Goals Made"
+  ) |>
+  tab_header(title = "Top 5 Teams for Field Goals")
+
+
+#The San Diego Chargers have made the most field goals over the years, but these numbers
+#are pretty close
+
+#Let's look at percentage of field goals made
+
+
+fg_percent <- by_team |> 
+  mutate(percentage = round(made / attempted, 2)) |>
+  arrange(desc(percentage)) 
+
+
+#in a table
+fg_percent |>
+   slice(1:5) |>
+  gt() |>
+  cols_label(
+    team = "NFL Team",
+    made = "Made",
+    attempted = "Attempted",
+    percentage = "% Made"
+  ) |>
+  tab_header(title = "NFL Teams With Highest Field Goal Success Rate")
+
+#Theere's a wide range of attempts/FGs made represented here (possibly due to the age 
+#of the teams)
+#The Baltimore Ravens have the highest percentage, but only 179 field goals made out of 206
+#The Pats, on the other hand, rank fifth and have ade 626 out of 755
+
+#a slightly more visually overwhelming presentation of the above info
+fg_percent |>
+  slice(1:5) |>
+  ggplot(aes(x = reorder(team, -percentage), y = percentage, fill = team)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = scales::percent(percentage)), vjust = -0.5) +
+  scale_y_continuous(labels = scales::percent, expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    title = "Top 5 NFL Teams by Field Goal Success Rate",
+    x = "NFL Team",
+    y = "Success Rate"
+  ) +
+  theme_minimal()
+
+```
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed March 5, 2026.
