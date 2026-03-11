@@ -1,0 +1,30 @@
+---
+title: "Project 7 approach"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I've created an HTML file and a JSON file and uploaded them to GitHub. These files feature information about books I edited. I will load them here and compare them to see if they are identical and, if not, where they differ.
+
+books.html: <https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.html>
+
+books.json: <https://github.com/samanthabarbaro/data607/blob/main/books.json>
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(jsonlite)
+
+books_h <- read_html("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.html")
+
+
+html_df <- books_h |>
+  html_table(fill = TRUE) |>
+  .[[1]] 
+
+books_j <- fromJSON("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.json")
+
+```
