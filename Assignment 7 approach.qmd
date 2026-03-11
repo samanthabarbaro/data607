@@ -22,7 +22,7 @@ books_h <- read_html("https://raw.githubusercontent.com/samanthabarbaro/data607/
 
 
 html_df <- books_h |>
-  html_table(fill = TRUE) |>
+  html_table(fill = TRUE) %>%
   .[[1]] 
 
 books_j <- fromJSON("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.json")
