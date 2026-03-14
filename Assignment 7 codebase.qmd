@@ -1,0 +1,89 @@
+---
+title: "Project 7 approach"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Approach
+
+I've created HTML and JSON files and uploaded them to GitHub. These files feature information about books I edited. I will load them here and compare them to see if they are identical and, if not, where they differ.
+
+books.html: <https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.html>
+
+books.json: <https://github.com/samanthabarbaro/data607/blob/main/books.json>
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(jsonlite)
+
+books_h <- read_html("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.html")
+
+
+#turn into a data frame
+html_df <- books_h |>
+  html_table(fill = TRUE) %>%
+  .[[1]] 
+
+
+#Is this a data frame?
+is_tibble(html_df)
+
+#load json file and turn it into a data frame
+books_j <- fromJSON("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/books.json")
+
+```
+
+## Testing whether the data are identical
+
+These shouldn't be 100% identical since I used a semicolon in the HTML file, but not the JSON file.
+
+```{r}
+#are they identical? 
+identical_data <- all.equal(books_j, html_df)
+
+#not exactly, but they're close
+
+identical_data
+
+#A true or false function to check whether they're identical
+identical(books_j, html_df)
+
+#They are not identical
+
+#Let's make them more identical
+
+html_df_2 <- html_df |>
+    separate(col = Authors, into = c("Author_1", "Author_2"), sep = ";") 
+
+#I really should have left the semicolon as a separator
+
+books_j2 <- books_j |>
+    separate(col = Authors, into = c("Author_1", "Author_2"), sep = ",") 
+
+#replacing individual values
+
+books_j2[2, 2] <- "Angela Wood, Ph.D"
+
+books_j2[2, 3] <- NA
+
+#fixing some of the characters, which converted strangely
+html_df_2[1, 1] <- "Threshold Concepts in Women’s and Gender Studies"
+books_j2[1, 1] <- "Threshold Concepts in Women’s and Gender Studies"
+
+
+identical_data_2 <- all.equal(books_j2, html_df_2)
+
+identical_data_2
+
+diffs <- setdiff(books_j2, html_df_2)
+diffs
+
+#The tables have fewer differences, but still aren't exactly the same
+
+identical(books_j2, html_df_2)
+```
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed March 12, 2026.
