@@ -1,0 +1,105 @@
+---
+title: "Assignment 8"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Assignment 8 - Approach
+
+Pulling one bestseller list from 3/4, I noticed that 4 books on the mass market paperback bestsellers contain the word "Amish." These are by all different authors, so it's not a series. This suggests a popularity for Amish romances that I'd like to investigate further. I would like to find weekly the count of books on the mass market paperback bestsellers list that have the word "Amish" in them for the current year and what percentage of the MMPB bestsellers list they compose. I would also like to perform a search for articles that discuss this phenomenon.
+
+## Pulling the bestseller list from 3/4
+
+```{r}
+library(httr2)
+library(jsonlite)
+library(tidyverse)
+
+
+api_key <- Sys.getenv("NYT_API_KEY1")
+query <- "romantasy"
+
+resp <- request("https://api.nytimes.com/svc/books/v3/lists/overview.json?api-key=yourkey&published_date=2026-03-04") |>
+  req_url_query(`api-key` = api_key) |>
+  req_perform()
+
+# Parse to a readable table
+library(purrr)
+books_list <- resp |> 
+  resp_body_json() |> 
+  pluck("results", "books") |> 
+  map_df(as.data.frame)
+
+
+
+resp <- request("https://api.nytimes.com/svc/books/v3/lists/overview.json") |>
+  req_url_query(
+    `api-key` = api_key,
+    published_date = "2026-03-04"
+  ) |>
+  req_perform()
+
+# Parse
+raw_data <- resp |> resp_body_json()
+
+#flatten
+books_list <- raw_data$results$lists |> 
+    map_df(function(lst) {
+        lst$books |> 
+            map_df(function(book) {
+                tibble(
+                    list_name = lst$display_name,
+                    rank = book$rank,
+                    title = book$title,
+                    author = book$author,
+                    description = book$description
+                )
+            })
+    })
+
+```
+
+## Searching for articles about Amish romance
+
+```{r}
+api_key_2 <- Sys.getenv("NYT_API_KEY1")
+query_2 <- "Amish romance"
+
+resp <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(q = query_2, `api-key` = api_key_2) |>
+  req_perform()
+
+data <- resp |> 
+  resp_body_json()
+
+headlines <- sapply(data$response$docs, function(x) x$headline$main)
+print(headlines)
+
+#casting a wider net - book search query over 1 year
+
+one_year_ago <- format(Sys.Date() - 365, "%Y%m%d")
+
+# request
+resp <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(
+    q = query_2,
+    fq = 'section_name:("Books")', 
+    begin_date = one_year_ago,     
+    `api-key` = api_key_2
+  ) |>
+  req_perform()
+
+#parse data
+data <- resp |> resp_body_json()
+
+articles_table <- data$response$docs |> 
+  map_df(~tibble(
+    date = .x$pub_date,
+    headline = .x$headline$main,
+    section = .x$section_name,
+    url = .x$web_url
+  ))
+
+
+```
