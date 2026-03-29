@@ -1,0 +1,277 @@
+---
+title: "Assignment 8"
+author: "Sam Barbaro"
+format: html
+editor: visual
+---
+
+## Assignment 8 
+
+Pulling one bestseller list from 3/4, I noticed that 4 books on the mass market paperback bestsellers contain the word "Amish." These are by all different authors, so it's not a series. This suggests a popularity for Amish romances that I'd like to investigate further. I would like to use the books API find weekly the count of books on the mass market paperback bestsellers list that have the word "Amish" in them for the current year and what percentage of the MMPB bestsellers list they compose. I would also like to perform a search for articles that discuss this phenomenon using the articles API.
+
+## Pulling the bestseller list from 3/4
+
+I test the API by pulling the bestseller list from March 3.
+
+```{r}
+library(httr2)
+library(jsonlite)
+library(tidyverse)
+library(httr2)
+library(purrr)
+library(lubridate)
+
+#My API keys are stored elsewhere in the R environment
+api_key <- Sys.getenv("NYT_API_KEY1")
+
+
+resp <- request("https://api.nytimes.com/svc/books/v3/lists/overview.json") |>
+  req_url_query(
+    `api-key` = api_key,
+    published_date = "2026-03-04"
+  ) |>
+  req_perform()
+
+# Parse
+raw_data <- resp |> resp_body_json()
+
+#flatten and format in a tibble
+books_list <- raw_data$results$lists |> 
+    map_df(function(lst) {
+        lst$books |> 
+            map_df(function(book) {
+                tibble(
+                    list_name = lst$display_name,
+                    rank = book$rank,
+                    title = book$title,
+                    author = book$author,
+                    description = book$description
+                )
+            })
+    })
+
+```
+
+I used Gemini to figure out how to parse and flatten this data and then mixed and matched the variables. map_df unests the data frame. The Books API sends back several lists (e.g. mass market, hardcover fiction), with tons of information (ISBNs , links to buy at various booksellers, rank last week). This selects a few important details (list name, rank, title, author, and description), and places them in a tibble.
+
+## Pulling multiple bestseller lists
+
+Trying to pull all the bestseller lists for an entire year, of course, resulted in a throttle. Here are three for this year. There's a built-in 12-second delay before each query.
+
+```{r}
+
+# Dates for bestseller lists
+comparison_dates <- c("2026-01-04", "2026-02-01", "2026-03-01")
+
+
+get_monthly_overview <- function(target_date) {
+  Sys.sleep(12) # Prevent "Too Many Requests" errors (12 seconds between queries)
+  
+  resp <- request("https://api.nytimes.com/svc/books/v3/lists/overview.json") |>
+    req_url_query(
+      `api-key` = api_key,
+      published_date = target_date
+    ) |>
+    req_perform()
+  
+  raw_data <- resp |> resp_body_json()
+  
+  # Flatten logic
+  raw_data$results$lists |> 
+    map_df(function(lst) {
+      map_df(lst$books, ~ tibble(
+        published_date = target_date,
+        list_name = lst$display_name,
+        rank = .x$rank,
+        title = .x$title,
+        author = .x$author,
+        description = .x$description
+      ))
+    })
+}
+
+
+books_comparison <- map_df(comparison_dates, get_monthly_overview)
+
+# View results
+print(books_comparison)
+```
+
+## Filter for books about Amish romance
+
+```{r}
+books_filtered <- books_comparison |>
+  filter(grepl("AMISH", title, ignore.case = TRUE))
+books_filtered
+
+#there are 6, all mass market paperbacks
+
+#let's check the description, too
+books_description <- books_comparison |>
+  filter(grepl("AMISH", description, ignore.case = TRUE))
+
+```
+
+What percentage of the MMPB bestsellers list do these books compose?
+
+```{r}
+count(books_filtered) / (count(books_comparison |> filter(list_name == "Mass Market"))
+  )
+
+#Amish romances account for ~13.3% of mass market bestsellers YTD in 2026.
+```
+
+```{r}
+books_description
+#only 4 books include the word "Amish" in their description
+
+#let's see how many times the Rachel Reid (Heated Rivalry) books show up
+heated_rivalry <- books_comparison |> 
+  filter(grepl("Rachel Reid", author, ignore.case = TRUE))
+
+heated_rivalry
+
+#which book appears the most often
+
+book_frequency <- books_comparison |>
+    count(title) |>
+  arrange(desc(n)) |>
+  slice_head(n = 50)
+
+book_frequency
+
+#which author appears the most often?
+author_frequency <- books_comparison |>
+    count(author) |>
+  arrange(desc(n)) |>
+  slice_head(n = 50)
+
+author_frequency
+
+#who has more than one book on the list (not just one book that appears a bunch
+#of times)?
+
+unique_books <- books_comparison |>
+  distinct(title, author)
+
+popular_authors <- unique_books |>
+  count(author) |>
+  arrange(desc(n)) |>
+  filter(n > 1)
+
+popular_authors
+```
+
+## Searching for articles about Amish romance
+
+```{r}
+api_key_2 <- Sys.getenv("NYT_API_KEY2")
+query_2 <- "Amish romance"
+
+resp <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(q = query_2, `api-key` = api_key_2) |>
+  req_perform()
+
+data <- resp |> 
+  resp_body_json()
+
+headlines <- sapply(data$response$docs, function(x) x$headline$main)
+print(headlines)
+
+
+
+```
+
+Only one of these articles is likely relevant (8 New Books...). The article about Kate Baer talks about how she read Amish Romances. Let's try just looking for "Amish" and "Amish books."
+
+```{r}
+
+Sys.sleep(20) 
+
+query_3 <- "Amish"
+query_4 <- "Amish books"
+
+resp_2 <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(q = query_3, `api-key` = api_key_2) |>
+  req_perform()
+
+data_2 <- resp_2 |> 
+  resp_body_json()
+
+headlines_2 <- sapply(data_2$response$docs, function(x) x$headline$main)
+print(headlines_2)
+
+#searching for "Amish books"
+Sys.sleep(30) 
+
+resp_3 <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(q = query_4, `api-key` = api_key_2) |>
+  req_perform()
+
+data_3 <- resp_3 |> 
+  resp_body_json()
+
+headlines_3 <- sapply(data_3$response$docs, function(x) x$headline$main)
+print(headlines_3)
+
+
+```
+
+At this point it became clear that there was a limit of 10 results. These queries request pages 2 and 3.
+
+```{r}
+
+Sys.sleep(20) 
+
+resp_page_2 <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(
+    q = query_4, 
+    `api-key` = api_key_2,
+    page = 1  
+  ) |>
+  req_perform()
+
+data_4 <- resp_page_2 |> 
+  resp_body_json()
+
+headlines_4 <- sapply(data_4$response$docs, function(x) x$headline$main)
+print(headlines_4)
+
+#let's look at Amish Romance again
+Sys.sleep(20) 
+
+resp_page_2 <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(
+    q = query_2, 
+    `api-key` = api_key_2,
+    page = 1  
+  ) |>
+  req_perform()
+
+data_4 <- resp_page_2 |> 
+  resp_body_json()
+
+headlines_5 <- sapply(data_4$response$docs, function(x) x$headline$main)
+print(headlines_5)
+
+Sys.sleep(20) 
+#page 3
+resp_page_3 <- request("https://api.nytimes.com/svc/search/v2/articlesearch.json") |>
+  req_url_query(
+    q = query_2, 
+    `api-key` = api_key_2,
+    page = 2  
+  ) |>
+  req_perform()
+
+data_5 <- resp_page_3 |> 
+  resp_body_json()
+
+headlines_6 <- sapply(data_5$response$docs, function(x) x$headline$main)
+print(headlines_6)
+```
+
+Here we see a little more evidence of these books – paperback highlights, a crime writer, "Love Finds You in Charm."
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed March 24-27, 2026.
