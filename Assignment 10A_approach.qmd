@@ -1,0 +1,168 @@
+---
+title: "Assignment 10A"
+format: html
+editor: visual
+---
+
+## Assignment 10 A
+
+We've reproduced the example code for sentiment analysis from chapter two of *Text Mining With R*. Using the sotu library (filled with state of the union speeches up until 2020), we will break up the text and perform a similar sentiment analysis with the speeches of Abraham Lincoln, Franklin D. Roosevelt, and Barack Obama.
+
+```{r}
+library(tidyverse)
+library(janeaustenr)
+library(tidytext)
+library(textdata)
+
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+
+
+
+#get_sentiments("afinn")
+#get_sentiments("bing")
+#get_sentiments("nrc")
+```
+
+```{r}
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+```
+
+```         
+http://saifmohammad.com/WebDocs/Lexicons/NRC-Emotion-Lexicon.zip' Content type 'application/zip' length 25878449 bytes (24.7 MB)
+```
+
+```{r}
+library(tidyr)
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+pride_prejudice
+
+```
+
+```{r}
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+```{r}
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+```{r}
+get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+
+get_sentiments("bing") %>% 
+  count(sentiment)
+```
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts
+```
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+Silge, J., & Robinson, D. (2017). *Text mining with R: A tidy approach*. O'Reilly Media.
+
+The sotu package contains state of the union addresses.
+
+```{r}
+library(sotu)
+
+data(sotu_text)
+
+#make a tidy data frame
+sotu_df <- tibble(
+  president = sotu_meta$president,
+  year = sotu_meta$year,
+  text = sotu_text
+)
+
+#unnest
+tidy_sotu <- sotu_df %>%
+  unnest_tokens(word, text)
+```
+
+There are hundreds of state of the union addresses. For this exercise, we'll look at three presidents: Abraham Lincoln, Franklin D. Roosevelt, and Barack Obama.
+
+```{r}
+obama <- sotu_df |>
+  filter (president == "Barack Obama")
+
+d_roosevelt <- sotu_df |>
+  filter (president == "Franklin D. Roosevelt")
+
+lincoln <- sotu_df |>
+  filter (president == "Abraham Lincoln")
+```
