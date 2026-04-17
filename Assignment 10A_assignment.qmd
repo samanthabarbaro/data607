@@ -1,0 +1,789 @@
+---
+title: "Assignment 10A"
+format: html
+editor: visual
+---
+
+## Assignment 10A
+
+We've reproduced the example code for sentiment analysis from chapter two of *Text Mining With R*. Using the sotu library (filled with state of the union speeches up until 2020), we break up the text and perform a similar sentiment analysis, with appropriate adjustments for shorter texts. At the end, we compare different word cloud packages.
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(janeaustenr)
+library(tidytext)
+library(textdata)
+library(wordcloud)
+library(tidyr)
+library(reshape2)
+
+
+```
+
+## Note for Running this Code Successfully
+
+Getting this document to render correctly requires first running tidytext::get_sentiments("nrc") and tidytext::get_sentiments("afinn") in the console. You must accept license/citation agreement before rendering (press 1 to agree.). Otherwise, execution will halt.
+
+```{r}
+#run these lines of code in your console before rendering the rest of the document:
+tidytext::get_sentiments("nrc")
+
+tidytext::get_sentiments("afinn")
+
+```
+
+```{r}
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+
+
+
+```
+
+```{r, warning = FALSE}
+
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy, by = join_by(word)) %>%
+  count(word, sort = TRUE)
+```
+
+```         
+http://saifmohammad.com/WebDocs/Lexicons/NRC-Emotion-Lexicon.zip' Content type 'application/zip' length 25878449 bytes (24.7 MB)
+```
+
+```{r}
+
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many"
+             ) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+pride_prejudice
+
+```
+
+```{r}
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn"), by = "word", relationship = "many-to-many"
+             ) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many"
+               ) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(
+      get_sentiments("nrc") %>% 
+        filter(sentiment %in% c("positive", "negative")), 
+      by = "word", 
+      relationship = "many-to-many"
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+```{r}
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+```{r}
+get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+
+get_sentiments("bing") %>% 
+  count(sentiment)
+```
+
+```{r}
+bing_word_counts <- tidy_books %>%
+   inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many"
+             ) %>% 
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts
+```
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+```{r, warning=FALSE}
+
+tidy_books %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+Skipping the part where he adds the word "miss" to stop words.
+
+```{r, warning=FALSE}
+
+tidy_books %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+```
+
+```{r}
+
+tidy_books %>%
+   inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many"
+             ) %>% 
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
+```{r}
+p_and_p_sentences <- tibble(text = prideprejudice) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+
+p_and_p_sentences$sentence[2]
+
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text, token = "regex", 
+                pattern = "Chapter|CHAPTER [\\dIVXLC]") %>%
+  ungroup()
+
+austen_chapters %>% 
+  group_by(book) %>% 
+  summarise(chapters = n())
+
+bingnegative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords/words) %>%
+  filter(chapter != 0) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+Silge, J., & Robinson, D. (2017). *Text mining with R: A tidy approach*. O'Reilly Media.
+
+## Sentiment Analysis With the sotu Package
+
+The sotu package contains state of the union addresses.
+
+```{r, warning=FALSE}
+library(sotu)
+
+data(sotu_text)
+
+#make a tidy data frame
+sotu_df <- tibble(
+  president = sotu_meta$president,
+  year = sotu_meta$year,
+  text = sotu_text
+)
+
+#unnest
+tidy_sotu <- sotu_df %>%
+  unnest_tokens(word, text)
+```
+
+### Choosing three sets of presidential speeches
+
+There are hundreds of state of the union addresses. For this exercise, we'll look at three presidents: Abraham Lincoln, Franklin D. Roosevelt, and Barack Obama.
+
+```{r}
+obama <- sotu_df |>
+  filter (president == "Barack Obama")
+
+d_roosevelt <- sotu_df |>
+  filter (president == "Franklin D. Roosevelt")
+
+lincoln <- sotu_df |>
+  filter (president == "Abraham Lincoln")
+```
+
+### Unnesting the text
+
+```{r}
+
+#Obama
+tidy_obama <- obama %>%
+  group_by(year) %>%
+  mutate(
+    linenumber = row_number(),
+    speech_id = cur_group_id() 
+  ) %>%
+  ungroup() %>%
+    unnest_tokens(word, text)
+    
+
+#Roosevelt
+tidy_roosevelt <- d_roosevelt %>%
+  group_by(year) %>%
+  mutate(
+    linenumber = row_number(),
+    speech_id = cur_group_id() 
+  ) %>%
+  ungroup() %>%
+    unnest_tokens(word, text)
+
+#Lincoln
+
+tidy_lincoln <- lincoln %>%
+  group_by(year) %>%
+  mutate(
+    linenumber = row_number(),
+    speech_id = cur_group_id() 
+  ) %>%
+  ungroup() %>%
+    unnest_tokens(word, text)
+```
+
+### Bing net sentiment over the years
+
+Instead of grouping by chapters, we'll group by year, and show overall sentiments together, so we can see how it changed over a presidency.
+
+```{r}
+obama_sentiment <- tidy_obama %>%
+  inner_join(get_sentiments("bing"), by = join_by(word)) %>%
+  count(year, index = linenumber, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+
+ggplot(obama_sentiment, aes(x = year, y = sentiment, fill = year)) +
+  geom_col(show.legend = FALSE) + 
+  scale_x_continuous(breaks = seq(min(obama_sentiment$year), max(obama_sentiment$year), by = 1)) +
+  labs (title = "Obama's net sentiment over time")
+```
+
+2009 and 2010 speeches were not very positive, possibly due to the global economic crisis. After the midterms (which the democrats lost big time), he became more positive, and then was more negative in the latter half of his second term.
+
+**for FDR:**
+
+FDR had more terms, and therefore more states of the union, than any other president.
+
+```{r}
+fdr_sentiment <- tidy_roosevelt %>%
+  inner_join(get_sentiments("bing"), by = join_by(word)) %>%
+  count(year, index = linenumber, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+
+ggplot(fdr_sentiment, aes(x = year, y = sentiment, fill = year)) +
+  geom_col(show.legend = FALSE) + 
+  scale_x_continuous(breaks = seq(min(fdr_sentiment$year), max(fdr_sentiment$year), by = 1)) +
+  labs (title = "FDR's net sentiment over time")
+```
+
+There are net negatives in 1938 and 1942, and a big positivity spike in 1945. Unfortunately, we have no way of telling what was happening.
+
+**Lincoln:**
+
+```{r}
+lincoln_sentiment <- tidy_lincoln %>%
+  inner_join(get_sentiments("bing"), by = join_by(word)) %>%
+  count(year, index = linenumber, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+
+ggplot(lincoln_sentiment, aes(x = year, y = sentiment, fill = year)) +
+  geom_col(show.legend = FALSE) + 
+  scale_x_continuous(breaks = seq(min(lincoln_sentiment$year), max(lincoln_sentiment$year), by = 1)) +
+  labs (title = "Lincoln's net sentiment over time")
+```
+
+Lincoln's net sentiment shows as generally very positive, with a small dip in 1863.
+
+### Joy Words
+
+What "joy" words did Obama use most?
+
+```{r}
+tidy_obama %>%
+  inner_join(nrc_joy, by = join_by(word)) %>%
+  count(word, sort = TRUE)
+```
+
+Apparently "pay," "clean," and "vote" are joy words. The other words seem like they belong, but 48 instances of the word "laughter" is notable.
+
+### Creating a Comparison for FDR's Speeches
+
+```{r}
+#FDR and AFINN
+afinn_fdr <- tidy_roosevelt %>% 
+  inner_join(get_sentiments("afinn"), by = join_by(word)) %>% 
+  group_by(year) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+
+bing_and_nrc_fdr <- bind_rows(
+  tidy_roosevelt %>% 
+    inner_join(get_sentiments("bing"), by = join_by(word), relationship = "many-to-many") %>%
+    mutate(method = "Bing et al."),
+  tidy_roosevelt %>% 
+    inner_join(get_sentiments("nrc"),by = join_by(word), relationship = "many-to-many",
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+    count(method, year, sentiment) %>%
+    pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+    mutate(sentiment = positive - negative)
+
+fdr_compiled <- bind_rows(afinn_fdr, 
+          bing_and_nrc_fdr)
+
+fdr_compiled |> 
+  ggplot(aes(year, sentiment, fill = year)) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(~method, ncol = 1, scales = "free_y") +
+    scale_x_continuous(breaks = seq(min(fdr_compiled$year), max(fdr_compiled$year), by = 1)) +
+    labs(title = "Comparing Afinn, Bing, and NRC using FDR's SOTUs")
+
+```
+
+Interestingly, between Bing and AFINN, the net positive years look somewhat similar. However, the negative years look a lot more negative with AFINN. NRC registers everything as positive. There's a lot of variation in the way 1944 is scored.
+
+### Most Common Positive and Negative Words
+
+Bing (we'll do it for all three sets of speeches here):
+
+```{r}
+bing_word_counts_fdr <- tidy_roosevelt %>%
+  inner_join(get_sentiments("bing"), by = join_by(word), relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts_fdr
+
+bing_word_counts_obama <- tidy_obama %>%
+  inner_join(get_sentiments("bing"), by = join_by(word), relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts_obama
+
+
+bing_word_counts_lincoln <- tidy_lincoln %>%
+  inner_join(get_sentiments("bing"), by = join_by(word), relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts_lincoln
+```
+
+### Graphing Positive and Negative Word Counts
+
+```{r}
+#FDR
+bing_word_counts_fdr %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment (FDR)",
+       y = NULL)
+#Obama
+bing_word_counts_obama %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment (Obama)",
+       y = NULL)
+
+#Lincoln
+bing_word_counts_lincoln %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment (Lincoln)",
+       y = NULL)
+```
+
+"Great" shows up a lot in FDR's positive words. Was he talking about the Great Depression or the Great War?
+
+A quick search revealed that people did call it the "Great Depression" while it was happening, but FDR did not use the term in his speeches. In 1939, he used the term "great unemployment of capital" to refer to the national debt, which was apparently not bad.
+
+### Presidential Word Clouds
+
+```{r, warning=FALSE}
+
+#specifying the wordcloud package for these
+tidy_obama %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+
+tidy_roosevelt %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+
+tidy_lincoln %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+```
+
+### Positive / negative word clouds
+
+```{r, warning=FALSE}
+
+tidy_obama %>%
+  inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+
+tidy_roosevelt %>%
+  inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+
+tidy_lincoln %>%
+  inner_join(get_sentiments("bing"), by = "word", relationship = "many-to-many") %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
+### Sentences
+
+Breaking Obama's speeches down into sentences.
+
+```{r}
+obama_sentences <- obama %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+
+obama_sentences$sentence[2]
+
+```
+
+This is a sentence fragment because the first sentence ends with "mr."
+
+```{r}
+obama_sentences$sentence[1]
+
+```
+
+```{r}
+fdr_sentences <- d_roosevelt %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+
+lincoln_sentences <- lincoln %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+```
+
+### Who had the shortest/longest sentences?
+
+```{r}
+wordcounts_obama <- obama_sentences %>%
+  mutate(words = str_count(sentence, "\\S+"))
+
+
+wordcounts_fdr <- fdr_sentences %>%
+  mutate(words = str_count(sentence, "\\S+"))
+
+wordcounts_lincoln <- lincoln_sentences %>%
+  mutate(words = str_count(sentence, "\\S+"))
+
+```
+
+### Calculating the Mean by Speech
+
+```{r}
+avg_sentence_obama <- wordcounts_obama |> group_by(year) |>
+  summarise(avg = mean(words))
+
+avg_sentence_obama |> 
+  ggplot(aes(year, avg, fill = year)) +
+    geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(avg_sentence_obama$year), max(avg_sentence_obama$year), by = 1)) +
+    labs(title = "Average words per sentence (Obama)")
+
+avg_sentence_fdr <- wordcounts_fdr |> group_by(year) |>
+  summarise(avg = mean(words))
+
+avg_sentence_fdr |> 
+  ggplot(aes(year, avg, fill = year)) +
+    geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(avg_sentence_fdr$year), max(avg_sentence_fdr$year), by = 1)) +
+    labs(title = "Average words per sentence (FDR)")
+
+avg_sentence_lincoln <- wordcounts_lincoln |> group_by(year) |>
+  summarise(avg = mean(words))
+
+avg_sentence_lincoln |> 
+  ggplot(aes(year, avg, fill = year)) +
+    geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(avg_sentence_lincoln$year), max(avg_sentence_lincoln$year), by = 1)) +
+    labs(title = "Average words per sentence (Lincoln)")
+```
+
+Obama had the shortest words per sentence. Could this have been a symptom of changing times/attention spans?
+
+### Speech Lengths
+
+We can't unnest by chapter. Instead, let's see which speech was the longest.
+
+```{r}
+obama_speech_length <- tidy_obama |> count(year, name = "word_count")
+
+obama_speech_length |> ggplot(aes(x = year, y = word_count, fill = year)) +
+  geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(obama_speech_length$year), max(obama_speech_length$year), by = 1)) +
+    labs(title = "Obama's SOTU speech lengths in words")
+
+
+fdr_speech_length <- tidy_roosevelt |> count(year, name = "word_count")
+
+fdr_speech_length |> ggplot(aes(x = year, y = word_count, fill = year)) +
+  geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(fdr_speech_length$year), max(fdr_speech_length$year), by = 1)) +
+    labs(title = "FDR's SOTU speech lengths in words")
+
+lincoln_speech_length <- tidy_lincoln |> count(year, name = "word_count")
+
+lincoln_speech_length |> ggplot(aes(x = year, y = word_count, fill = year)) +
+  geom_col(show.legend = FALSE) +
+    scale_x_continuous(breaks = seq(min(lincoln_speech_length$year), max(lincoln_speech_length$year), by = 1)) +
+    labs(title = "Lincoln's SOTU speech lengths in words")
+```
+
+FDR's speeches were the shortest in general, with one long speech in 1945.
+
+### Quantifying Presidential Negativity
+
+Quantifying the negativity ratio in each of Obama's SOTUs:
+
+```{r}
+tidy_obama %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(obama_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  ungroup()
+
+#the most negative year
+tidy_obama %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(obama_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+For FDR:
+
+```{r}
+tidy_roosevelt %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(fdr_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  ungroup()
+
+#the most negative year
+tidy_roosevelt %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(fdr_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+```{r}
+tidy_lincoln %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(lincoln_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  ungroup()
+
+#the most negative year
+tidy_lincoln %>%
+  semi_join(bingnegative, by = join_by(word)) %>%
+  group_by(year) %>%
+  summarize(negativewords = n()) %>%
+  left_join(lincoln_speech_length, by = "year") %>%
+  mutate(ratio = negativewords/word_count) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+Lincoln was the least negative president. (Read: Lincoln's speeches hat the fewest ratio of negative words, as per the Bing scale).
+
+## Finding a Better Word Cloud
+
+let's try Wordcloud2:
+
+```{r}
+library(wordcloud2)
+#demo here: wordcloud2(data = demoFreq)
+
+obama_frequency <- tidy_obama %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word, sort = TRUE)
+
+wordcloud2(data = obama_frequency)
+
+fdr_frequency <- tidy_roosevelt %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word, sort = TRUE)
+
+wordcloud2(data = fdr_frequency)
+```
+
+### ggplot Word Cloud
+
+ggplot includes a word cloud function. You can add color and tilt the words. If you don't limit the number of words displayed, they'll just stack on top of each other. It also looks kind of sparse.
+
+A demo on rpubs here: <https://rpubs.com/mgei/1259234>, which this code was pulled from:
+
+```{r, warning=FALSE}
+library(ggwordcloud)
+
+lincoln_frequency <- tidy_lincoln %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word, sort = TRUE)
+
+ggplot(lincoln_frequency |> head(35) |> 
+         mutate(first_letter = str_sub(word, 1, 1) |> str_to_lower()), 
+       aes(label = word, size = n, color = word)) +
+  geom_text_wordcloud(area_corr = TRUE) +
+  scale_size_area(max_size = 40) +
+  theme_minimal()
+```
+
+### Modelwordcloud
+
+Again, taken from this demo:
+
+<https://rpubs.com/mgei/1259234>
+
+```{r, warning=FALSE}
+library(modelwordcloud)
+
+modelwordcloud::wordcloud(words = obama_frequency[1:30, "word"][[1]], 
+                          freq = obama_frequency[1:30, "n"][[1]])
+
+#adding random color
+modelwordcloud::wordcloud(words = obama_frequency[1:50, "word"][[1]], 
+          freq = obama_frequency[1:50, "n"][[1]],
+          colors = RColorBrewer::brewer.pal(8, "Accent"),
+          random_color = TRUE)
+
+
+modelwordcloud::wordcloud(words = obama_frequency[1:80, "word"][[1]], 
+          freq = obama_frequency[1:80, "n"][[1]],
+          colors = RColorBrewer::brewer.pal(8, "Accent"),
+          random_color = TRUE)
+
+```
+
+### PubMedWordCloud
+
+This code was also pulled/modified from the demo:
+
+```{r, warning=FALSE}
+library(PubMedWordcloud)
+
+plotWordCloud(obama_frequency |> rename(freq = n))
+
+
+plotWordCloud(obama_frequency |> rename(freq = n), 
+              scale = c(3, 0.3), min.freq = 1, max.words = 200,
+              random.order = FALSE, rot.per = 0.1, use.r.layout = T,
+              colors = brewer.pal(8, "Accent"))
+```
+
+### Analysis
+
+Overall, wordcloud2 is the most aesthetically pleasing and T-shirt ready, but it can be overwhelming if you're just trying to understand the tone. PubMed seems like a more organized and straightforward way to get an idea of the quantitative data you're working with. ggword cloud looked a lot better in the demo cited, but it's having problems rendering, as is modelwordcloud.
+
+It's also interesting to see that the tone and language of speeches from another time represented the zeitgeist.
