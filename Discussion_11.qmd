@@ -1,0 +1,89 @@
+---
+title: "Scenario Design"
+format: html
+editor: visual
+---
+
+## Discussion 11: Analyze a commercial Recommender
+
+## Scenario design
+
+I've chosen to analyze the Goodreads recommender. Goodreads is owned by Amazon, and the ultimate goal is to funnel users to Amazon to purchase books. However, it's a social media site, not a book-buying platform, so I will spend more time on the target users.
+
+### Target users
+
+Avid and casual readers across all different genres who want to:
+
+-   Keep a log of what they've read
+
+-   Engage with other readers
+
+-   Rate and review books (let their opinions be known)
+
+-   Crucially, for a recommendation system, find their next great read and fill out a wishlist of books they want to read in the future
+
+To help users accomplish the main goal–finding books for their wishlist–the site can show books likely to match their preference. There are multiple ways to do this, including recommending highly-rated or popular books in the genre of their choice, finding what similar users have rated well, or finding what similar users have read quickly (one feature counts the number of days a user took to read a book).
+
+### The organization
+
+Amazon purchased Goodreads in March 2013, so it's safe to assume it fit into their strategy. However, it doesn't seem like they push Amazon books (Amazon has a publishing arm) or any of the many self-published books that appear on their top 100. Still, it's safe to assume the ultimate goal of funneling users to Amazon to purchase physical books or ebooks. They also want to gather data on consumer behavior–a book may have many times the number of ratings on Goodreads than it does on Amazon.
+
+They can achieve their goals through fostering good will and engagement on the platform, and by experimenting with recommendation styles until they hit the right one.
+
+## The existing system
+
+The only article I could find was from 2011 (before they were acquired):
+
+<https://www.goodreads.com/blog/show/303-announcing-goodreads-personalized-recommendations>
+
+*"It maps out the connections between books by looking at how often they appear on the same bookshelves and whether they were enjoyed by the same people. On average, Goodreads members have 140 books on their shelves. With this information, the engine learns how your tastes are similar to or different from the tastes of other Goodreads members."*
+
+<https://help.goodreads.com/s/article/How-Can-I-Improve-my-Recommendations>
+
+Load the recommendations screen:
+
+![](images/clipboard-3302869327.png)
+
+From my recommendations page:
+
+![](images/clipboard-1511206162.png)
+
+These are all bestsellers.
+
+On the page of a book I'm reading:
+
+![](images/clipboard-2003137187.png)
+
+Two are by the same author.
+
+Or read:
+
+![](images/clipboard-1897941827.png)
+
+Based on the article and the above recommendations, this seems to be a user similarity-based (collaborative filtering) recommendation system. Recommendations are based on those of users with similar tastes.
+
+The system also seems somewhat content-based. Item similarity (genre) plays a role: Even if many people read both *Project Hail Mary* and *Wuthering Heights,* they won't appear in the same set of recommendations because they're different genres. However, Goodreads also relies on users to categorize books (their different shelves) . So, while item categories are reliable, genre similarity seems to also be somewhat user-determined. For example, the above match of *Piranesi* and *Sea of Tranquility* seems to be based on how users categorized them, but they're close enough to be categorized together. They're both sci-fi- or fantasy-light.
+
+## Improving the Goodreads recommendations system 
+
+The problem: It is hard to find surprising or non-obvious matches on Goodreads. Popular books are over-represented in recommendation lists. They are on many users' shelves, tend to have relatively good ratings, so they continue to appear at the top as they are frequently matched with other books and users. Popular books stay popular at the expense of finding great matches.
+
+On one hand, this works. Dungeon-Crawler Carl was recommended to me, and I do own the audiobook, so the algorithm isn't wrong. However, the system tends to over-recommend certain book. Take the example above: There is no reason *Piranesi* should be recommended alongside *Sea of Tranqulity,* other than that they are both bestselling, shorter books by authors who have written bestselling longer books. One is sci-fi, the other is magical realism/fantasy. Please respect the difference.
+
+A few ways to improve the recommendation system:
+
+Help users find unexpected matches: Incorporate highly-rated books with fewer ratings into users' recommendations. These may appear on similar users' shelves or be a genre match to what the user tends to like.
+
+Goodreads collects metrics on how long it takes to read a book. Users mark when they start reading a book and when they finish it. Finishing something quickly usually means you were really into it. The platform could incorporate this metric into recommendations.
+
+Go two genres deep: If you like Terry Pratchett, it doesn't make sense to see Rick Riordan or Ursula K. Le Guin recommended. Go one category deeper for better-matched recommendations, for example, Romance/friends to lovers, Fantasy/literary fantasy, or Sci-fi/cyberpunk.
+
+### Other challenges
+
+At this risk of stating the obvious: Books take a long time to read. Even a fast reader might only finish one or two a week, whereas I can easily watch seven episodes of television in a single night (seven is about the limit). This means there's less data available for each user.
+
+Unlike with streaming, the data is largely self-reported. Users populate their own (public) shelves. They might forget to add books or skip adding something embarrassing (you don't have to admit to reading the *Bridgerton* books if you don't want to). A user might not get around to marking a book as "done" for several weeks or months, so that metric may not be accurate.
+
+On the other hand, the platform encourages ratings, and recommendations based on ratings are part of the draw. It's not strange for a book to have 10 or 20 times the number of ratings they do on Amazon
+
+BookTok and Bookstagram have also raised the question of whether Goodreads is irrelevant. If users can share recommendations and dialogue on a more dynamic platform, does Goodreads still have a place?
