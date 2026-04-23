@@ -1,0 +1,29 @@
+---
+title: "Assignment 11 Approach"
+format: html
+editor: visual
+---
+
+## Assignment 11
+
+In assignment 3A, I created a simple movie recommender system. I will iterate on this system, creating a content-based filtering system that recommends similar movies with high average ratings.
+
+I will augment the data (for example, by adding more information about each items and adding more movies). I will either put together my own algorithm or use a system like the recommenderlab package loaded below.
+
+**One proposed way to do this:**
+
+Create a new table with movies and category. Cross-reference this with the user's highest-rated movie category and recommend the highest-rated movie in that category that the user has not seen. If the user has seen all movies in that category, move on to the next-highest-rated, and so on.
+
+```{r, warning = FALSE}
+library(tidyverse)
+library(recommenderlab)
+```
+
+Reading the original data set:
+
+```{r}
+
+sql_url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv"  
+#read and convert blanks and NULL to NA  
+movie_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL")) 
+```
