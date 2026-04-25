@@ -1,0 +1,376 @@
+---
+title: "Assignment 11 Approach"
+format: html
+editor: visual
+---
+
+## Assignment 11
+
+In assignment 3A, I created a simple movie recommender system. I've iterated on this system, creating a content-based filtering system that recommends similar movies with high average ratings.
+
+I augmented the data by adding genre information about each movie. I put together my own algorithm, then used recommenderlab. Finally, I compare the recommendations made with an actual model to those using simple math.
+
+```{r, warning = FALSE}
+library(tidyverse)
+library(recommenderlab)
+```
+
+Reading the original data set:
+
+```{r}
+
+sql_url <- "https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/moviedata_CSV.csv"  
+#read and convert blanks and NULL to NA  
+movie_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL")) 
+```
+
+### Cleaning (reproduced from project 3A)
+
+```{r}
+#converting to tibble  
+movie_data <- as_tibble(movie_data)   
+
+#pivot longer
+long_movie_data <- movie_data |> pivot_longer(   -viewer,   names_to = "movie",   values_to = "rating" )  
+
+
+#And add the average for each movie 
+
+new_ratings <- long_movie_data |> 
+    mutate(avg_rating_global = round(mean(rating, na.rm = TRUE), 1)) |>
+    group_by(movie) |> 
+    mutate(avg_rating_movie = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup()
+
+
+new_ratings <- long_movie_data |> 
+    mutate(avg_rating_global = round(mean(rating, na.rm = TRUE), 1)) |>
+    group_by(movie) |>
+    mutate(avg_rating_movie = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup() |> 
+    group_by(viewer) |>
+    mutate(viewer_avg = round(mean(rating, na.rm = TRUE), 1)) |> 
+    ungroup() |>
+    mutate(user_diff = viewer_avg - avg_rating_global)
+
+#predicted ratings
+
+new_ratings <- new_ratings |> mutate(predicted_rating = (ifelse(is.na(rating), user_diff + avg_rating_movie, NA)))
+```
+
+### Creating a key
+
+Adding an incredibly nuanced genre category to match with ratings list.
+
+```{r}
+movie_list <- long_movie_data |> 
+  distinct(movie) |> mutate(genre = "holiday")
+
+movie_list[1:3, 2] <- "marvel"
+
+movie_list[4:6, 2] <- "dc"
+
+```
+
+### Joining
+
+Adding a genre to the original data frame:
+
+```{r}
+includes_genres <- left_join(new_ratings, movie_list, by = "movie") 
+
+genre_average <- includes_genres |>
+  group_by(viewer, genre) |>
+  mutate(avg_genre = na_if(round(mean(rating, na.rm = TRUE), 1), NaN)) |> 
+  ungroup()
+  
+
+#creating an index of favorite genres
+genre_average_only <- includes_genres |>
+  group_by(viewer, genre) |>
+  summarise(gen_avg = (round(mean(rating, na.rm = TRUE), 1))) |>
+  arrange(viewer, desc(gen_avg))
+
+genre_average_only
+  
+```
+
+### Sorting by predicted rating and preference
+
+Find the users' genre order of preference and recommend the next movie in that genre they should watch based on genre and predicted rating.
+
+Selecting the relevant columns:
+
+```{r}
+predictions_list <- genre_average |>
+  select(viewer, movie, rating, predicted_rating, genre, avg_genre) |>
+  arrange(viewer, desc(avg_genre), desc(predicted_rating))
+```
+
+### Incorporating genre (items) into predictions
+
+Because these are arranged by genre preference, we can just choose the first entry for each user where the rating is NA.
+
+```{r}
+genre_predictions <- predictions_list |>
+  filter(is.na(rating)) |>
+  group_by(viewer) |>
+  filter(row_number()==1)
+
+genre_predictions
+```
+
+The result is a simple content-based rating system. It's similar to project 3A, but it predicts the highest-rated movie of the genre the user is most interested in. I could have gone by average movie rating for that movie instead of predicted rating (the result would have been the same) to make the system purely item-based.
+
+## Using the recommenderlab package
+
+After several turns with Claude, here is a version of the recommenderlab package that actually functions (I hesitate to use the word "works"). I will attempt to explain/understand what's happening in the code below
+
+Step 1: This turns the rating into a double (not necessary) and fills in one value for "Best rating."
+
+Step 2: Creates a matrix of full ratings for each user and pivots wider. The distinct function also isn't necessary, but may be for a larger or messier data set.
+
+```{r}
+
+# ── 1. Coalesce actual + predicted rating ──────────────────────────────────────
+
+predictions_list <- predictions_list |>
+  mutate(best_rating = coalesce(as.double(rating), predicted_rating))
+
+# ── 2. Build rating matrix ─────────────────────────────────────────────────────
+
+rating_matrix <- predictions_list |>
+  select(viewer, movie, best_rating) |>
+  distinct(viewer, movie, .keep_all = TRUE) |>
+  pivot_wider(names_from = movie, values_from = best_rating) |>
+  column_to_rownames("viewer") |>
+  as.matrix()
+
+
+
+```
+
+Step 3: Cosine is a common way to measure similarity with recommender systems
+
+```{r}
+# ── 3. Genre similarity matrix ─────────────────────────────────────────────────
+
+cosine_sim <- function(mat) {
+  sim   <- mat %*% t(mat)
+  norms <- sqrt(rowSums(mat^2))
+  sim / outer(norms, norms)
+}
+
+genre_matrix <- predictions_list |>
+  distinct(movie, genre) |>
+  mutate(value = 1) |>
+  pivot_wider(names_from = genre, values_from = value, values_fill = 0) |>
+  column_to_rownames("movie") |>
+  as.matrix()
+
+#A wide DF where 1 denotes whether something belongs to a genre or not
+genre_sim <- cosine_sim(genre_matrix)
+
+```
+
+Step 4 creates a rating matrix that shows how correlated different ratings are. For example, superman and birds of prey have a -.9364 correlation, based on users who rated both movies. Someone who rated Superman well might rate Birds of Prey poorly.
+
+```{r}
+# ── 4. Rating similarity matrix ────────────────────────────────────────────────
+
+rating_sim <- cor(rating_matrix, use = "pairwise.complete.obs")
+rating_sim[is.na(rating_sim)] <- 0
+
+```
+
+Step 5 finds movies that exist in both genre and rating matrix (in theory, there could be unrated movies that have a genre listed, though that's not true for this data)
+
+Blended_sim weights how important rating and genre are in defining items for the rating system. The original split was .7/.3, but I changed it to .4/.6, with a heavier weight toward genre.
+
+```{r}
+# ── 5. Blend similarities 70/30 ────────────────────────────────────────────────
+shared_movies <- intersect(rownames(genre_sim), colnames(rating_matrix))
+
+blended_sim <- 0.4 * rating_sim[shared_movies, shared_movies] +
+               0.6 * genre_sim[shared_movies, shared_movies]
+```
+
+Step 6 creates the IBCF recommendation.
+
+-   First two functions: pulls all the viewers' ratings (actual and predicted); then pulls only the actual ratings
+
+-   Scores - scores movies the user hasn't actually seen.
+
+-   Sims - Finds similarities between target movie and all other movies.
+
+-   Rated mask is a boolean function that tells whether the user has rated a single movie (otherwise, predictions are not possible)
+
+-   Denom is the weighted avarage formula - it weight similarity to other movies, and attempts to figure out how a user would related a movie based on how they've rated other movies
+
+```{r}
+# ── 6. IBCF scoring function — bypasses recommenderlab's broken list export ────
+predict_ibcf <- function(viewer_name, rating_mat, sim_mat, n = 10) {
+  
+  viewer_ratings <- rating_mat[viewer_name, shared_movies]
+  
+  # Original (non-coalesced) ratings — NA = truly unrated
+  original_ratings <- predictions_list |>
+    filter(viewer == viewer_name) |>
+    select(movie, rating) |>
+    deframe()
+  
+  # Score every movie for this viewer
+  scores <- map_dbl(shared_movies, function(target_movie) {
+    
+    # Only recommend movies the viewer actually hasn't rated
+    if (!is.na(original_ratings[target_movie])) return(NA_real_)
+    
+    # Similarities between target movie and all other movies
+    sims <- sim_mat[target_movie, shared_movies]
+    
+    # Only use movies this viewer HAS rated as neighbors
+    rated_mask <- !is.na(viewer_ratings)
+    if (sum(rated_mask) == 0) return(NA_real_)
+    
+    neighbor_sims    <- sims[rated_mask]
+    neighbor_ratings <- viewer_ratings[rated_mask]
+    
+    # Weighted average: high-similarity movies pull harder on the prediction
+    denom <- sum(abs(neighbor_sims))
+    if (denom == 0) return(NA_real_)
+    sum(neighbor_sims * neighbor_ratings) / denom
+  })
+  
+  names(scores) <- shared_movies
+  
+  # Return top N unrated movies sorted by predicted score
+  scores |>
+    na.omit() |>
+    sort(decreasing = TRUE) |>
+    head(n) |>
+    enframe(name = "movie", value = "ibcf_score") |>
+    mutate(viewer = viewer_name)
+}
+
+```
+
+all_viewers - list of all viewers taken from the row names of the rating matrix
+
+recs_df is the predicted ratings of unseen movies based on the algorithm
+
+eval_df tests the model - it *is* predicting against the original set of predicted ratings, which seems incorrect: it should test predictions against the viewer's actual scores.
+
+```{r}
+# ── 7. Generate recommendations for all viewers ────────────────────────────────
+all_viewers <- rownames(rating_matrix)
+
+recs_df <- map_dfr(all_viewers, ~predict_ibcf(
+  viewer_name = .x,
+  rating_mat  = rating_matrix,
+  sim_mat     = blended_sim,
+  n           = 10
+)) |>
+  select(viewer, movie, ibcf_score)
+
+cat("=== Raw recommendations ===\n")
+print(recs_df)
+
+# ── 8. Evaluate: IBCF score vs predicted_rating on originally-unrated cells ────
+eval_df <- recs_df |>
+  left_join(
+    predictions_list |> select(viewer, movie, predicted_rating),
+    by = c("viewer", "movie")
+  ) |>
+  filter(!is.na(predicted_rating))  # only rows where we have ground truth
+
+rmse <- sqrt(mean((eval_df$ibcf_score - eval_df$predicted_rating)^2))
+mae  <-      mean( abs(eval_df$ibcf_score - eval_df$predicted_rating))
+
+cat("\nRMSE:", round(rmse, 3), "\n")
+cat("MAE: ", round(mae,  3), "\n")
+print(eval_df)
+
+# ── 9. Join full context back in ───────────────────────────────────────────────
+final_recommendations <- recs_df |>
+  left_join(
+    predictions_list |>
+      distinct(viewer, movie, .keep_all = TRUE) |>
+      select(viewer, movie, predicted_rating, genre, avg_genre),
+    by = c("viewer", "movie")
+  ) |>
+  arrange(viewer, desc(avg_genre), desc(ibcf_score))
+
+print(final_recommendations)
+
+rmse
+mae
+```
+
+The RMSE is really high for a 5-point rating system. This is expected – it's a really small data set. Let's check against the actual ratings.
+
+```{r}
+all_viewers <- rownames(rating_matrix)
+
+recs_df <- map_dfr(all_viewers, ~predict_ibcf(
+  viewer_name = .x,
+  rating_mat  = rating_matrix,
+  sim_mat     = blended_sim,
+  n           = 10
+)) |>
+  select(viewer, movie, ibcf_score)
+
+cat("=== Raw recommendations ===\n")
+print(recs_df)
+
+# ── 8. Evaluate: IBCF score vs predicted_rating on originally-unrated cells ────
+eval_df <- recs_df |>
+  left_join(
+    predictions_list |> select(viewer, movie, predicted_rating),
+    by = c("viewer", "movie")
+  ) |>
+  filter(!is.na(predicted_rating))  # only rows where we have ground truth
+
+rmse <- sqrt(mean((eval_df$ibcf_score - eval_df$predicted_rating)^2))
+mae  <-      mean( abs(eval_df$ibcf_score - eval_df$predicted_rating))
+```
+
+The RMSE is similar than the one compared to my predictions.
+
+### Comparing results
+
+```{r}
+library(gt)
+#the model
+
+
+actual_final_recommendations <- final_recommendations |>
+  mutate(ibcf_score = round(ibcf_score, 2))|>
+  group_by(viewer) |>
+  filter(row_number()==1)
+
+actual_final_recommendations |>
+  select(viewer, movie, ibcf_score) |>
+  as_tibble() |> 
+  gt() |>   
+  cols_label(
+    viewer = "Viewer",
+    movie = "Movie",
+    ibcf_score = "Predicted Rating"
+  ) |>
+  tab_header(title = "Predictions Using Recommenderlab")
+
+#my simple data frame
+genre_predictions |>
+  select(viewer, movie, predicted_rating) |>
+   as_tibble() |> 
+  gt(rowname_col = NULL) |>   
+  cols_label( 
+    viewer = "Viewer",
+    movie = "Movie",
+    predicted_rating = "Predicted Rating") |>
+  tab_header(title = "Predictions Using Math")
+```
+
+Overall, the predicted ratings are somewhat different, probably due to the weighted averages. All the recommendations are the same except for Jeff's - the algorithm recommends *The Holiday* instead of *The Grinch*, which is kind of puzzling because they are both holiday movies.
+
+Claude Sonnet 4.6. (2026). \[Large language model\]. https://gemini.google.com. Accessed April 23 & 24, 2026.
