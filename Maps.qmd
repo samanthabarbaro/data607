@@ -15,12 +15,7 @@ library(maps)
 Bathroom data
 
 ```{r}
-sql_url <- "C:/Users/Sam Barbaro/Desktop/Data 602 - advanced programming/Public_Restrooms_20260320.csv"  
-#read and convert blanks and NULL to NA  
-bathroom_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL")) 
-
-bathrooms <- ("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Public_Restrooms_20260320.csv")
-bathroom_data <- read.csv(bathrooms, na = c("", "NA", "null", "NULL")) 
+bathroom_data <- read.csv("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Public_Restrooms_20260320.csv", na = c("", "NA", "null", "NULL")) 
 ```
 
 The `echo: false` option disables the printing of code (only output is displayed).
