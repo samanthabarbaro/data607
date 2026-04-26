@@ -1,0 +1,128 @@
+---
+title: "Final Project Maps"
+format: html
+editor: visual
+---
+
+## Maps?
+
+```{r}
+library(tidyverse)
+library(sf)
+library(maps)
+```
+
+Bathroom data
+
+```{r}
+sql_url <- "C:/Users/Sam Barbaro/Desktop/Data 602 - advanced programming/Public_Restrooms_20260320.csv"  
+#read and convert blanks and NULL to NA  
+bathroom_data <- read.csv(sql_url, na = c("", "NA", "null", "NULL")) 
+
+bathrooms <- ("https://raw.githubusercontent.com/samanthabarbaro/data607/refs/heads/main/Public_Restrooms_20260320.csv")
+bathroom_data <- read.csv(bathrooms, na = c("", "NA", "null", "NULL")) 
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+
+coords_sf <- st_as_sf(bathroom_data, coords = c("Longitude", "Latitude"), crs = 4326)
+
+```
+
+Plotting with no background
+
+```{r}
+ggplot() +
+  geom_sf(data = coords_sf) +
+  theme_minimal()
+
+```
+
+```{r}
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+usa <- map_data("usa")
+
+options(tigris_use_cache = TRUE)
+
+
+
+#to focus on NYC using a world map, 
+#unfortunately, some of the bathrooms are in the ocean 
+ggplot() +
+  geom_polygon(data = usa, aes(x=long, y=lat, group=group), 
+               fill="green", color="blue") +
+  geom_sf(data = coords_sf, color = "red", size = 1) +
+  coord_sf(xlim = c(-74.3, -73.7), ylim = c(40.5, 41.0)) + 
+  theme_void()
+
+#trying a better map with Tigris
+
+# 5 counties that make up NYC
+nyc_map <- counties(state = "NY", cb = TRUE) |>
+  subset(NAME %in% c("New York", "Kings", "Queens", "Bronx", "Richmond"))
+
+#using the Tigris library and including a status label for the bathrooms
+#we want to know if they're closed
+ggplot() +
+  geom_sf(data = nyc_map, fill = "lightgray", color = "white") +
+  geom_sf(data = coords_sf, aes(color = Status), size = .5) + 
+  theme_void() + 
+  labs(color = "Status")
+
+```
+
+### Trying Shiny
+
+```{r}
+library(shiny)
+library(osmdata)
+library(mapview)
+library(leaflet)
+
+ui <- fluidPage(
+  textInput("city", "City", placeholder = "e.g. Queens"),
+  textInput("state", "State", placeholder = "e.g. New York"),
+  textInput("country", "Country", placeholder = "e.g. USA"),
+  textInput("amenity", "Amenity Type", placeholder = "e.g. pharmacy"),
+  actionButton("submit", "Submit"),
+  leafletOutput("map")
+)
+
+server <- function(input, output, session) {
+  
+  observeEvent(input$submit, {
+    # Concatenate city, state, and country inputs into a single string
+    address <- paste(input$city, input$state, input$country, sep = ", ")
+    bbox <- getbb(address)
+    query <- opq(bbox = bbox) |>
+      add_osm_feature(key = "amenity", value = input$amenity)
+    
+    assign("has_internet_via_proxy", TRUE, environment(curl::has_internet))
+    sf_obj <- osmdata_sf(query)
+    m <- mapview(sf_obj$osm_points)
+    output$map <- renderLeaflet({
+      m@map
+    })
+  })
+  
+}
+
+shinyApp(ui, server)
+```
+
+![<https://www.youtube.com/watch?v=efj6-aawubs>](images/clipboard-618704449.png)
+
+```{r}
+library(giscoR)
+
+gisco_get_nuts (
+  country = 'Ireland', 
+  year = '2024'
+) |> as_tibble() |>
+  janitor::clean_names() |>
+  count(levl_code)
+```
