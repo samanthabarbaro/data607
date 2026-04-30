@@ -1,0 +1,39 @@
+---
+title: "Project 4"
+format: html
+editor: visual
+---
+
+## Project 4: Approach
+
+I'm going to clean these spam and ham documents (stripping out stop words, punctuation, etc.) so I can analyze common words. I'll use tools like word cloud and sentiment analysis, and I'll at the length of emails to see if ham or spam is more commonly shorter.
+
+I will then use either tidytext or quanteda to train/test a model and analyze the numbers of true/false positives and negatives. Chapter 6, "Topic Modeling," from [Text Mining with R](https://www.tidytextmining.com/topicmodeling) may be helpful here.
+
+Reading the files from my local drive:
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(readtext)
+library(tidytext)
+library(textdata)
+library(wordcloud)
+library(tidyr)
+library(reshape2)
+
+#load the spam files from my local drive
+spam_df <- readtext("C:/Users/Sam Barbaro/Desktop/607 - data warehousing/spamham/20021010_spam/spam")
+
+spam_df <- spam_df |>
+  mutate(label = "spam")
+
+```
+
+```{r, warning = FALSE}
+#loading the ham files
+
+ham_df <- readtext("C:/Users/Sam Barbaro/Desktop/607 - data warehousing/spamham/20030228_easy_ham/easy_ham")
+
+ham_df <- ham_df |>
+  mutate(label = "ham")
+```
