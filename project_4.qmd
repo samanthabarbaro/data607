@@ -4,11 +4,9 @@ format: html
 editor: visual
 ---
 
-## Project 4: Approach
+## Project 4
 
-I'm going to clean these spam and ham documents (stripping out stop words, punctuation, etc.) so I can analyze common words. I'll use tools like word cloud and sentiment analysis, and I'll at the length of emails to see if ham or spam is more commonly shorter.
-
-I will then use either tidytext or quanteda to train/test a model and analyze the numbers of true/false positives and negatives. Chapter 6, "Topic Modeling," from [Text Mining with R](https://www.tidytextmining.com/topicmodeling) may be helpful here.
+Below, I load, clean, and tokenize spam and ham corpuses. I use word clouds, LDA, and histograms to understand typical document length and language. I then use the Quanteda package to create a prediction model using the Naive Bayes classifier.
 
 Reading the files from my local drive:
 
@@ -27,6 +25,9 @@ spam_df <- readtext("C:/Users/Sam Barbaro/Desktop/607 - data warehousing/spamham
 spam_df <- spam_df |>
   mutate(label = "spam")
 
+spam <- spam_df |>
+  select(text, label) |>
+  mutate(email_id = row_number())
 ```
 
 ```{r, warning = FALSE}
@@ -36,4 +37,247 @@ ham_df <- readtext("C:/Users/Sam Barbaro/Desktop/607 - data warehousing/spamham/
 
 ham_df <- ham_df |>
   mutate(label = "ham")
+
+ham <- ham_df |>
+  select(text, label) |>
+  mutate(email_id = row_number())
 ```
+
+### Unnesting the text
+
+```{r}
+tidy_spam <- spam %>%
+  group_by(email_id) %>%
+  mutate(
+    linenumber = row_number(),
+    email_id = cur_group_id() 
+  ) %>%
+  ungroup() %>%
+    unnest_tokens(word, text)
+
+tidy_ham <- ham %>%
+  group_by(email_id) %>%
+  mutate(
+    linenumber = row_number(),
+    email_id = cur_group_id() 
+  ) %>%
+  ungroup() %>%
+    unnest_tokens(word, text)
+```
+
+### Word cloud
+
+What are some of the most common words in spam and ham emails?
+
+```{r}
+tidy_spam %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+
+
+tidy_ham %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  count(word) %>%
+  with(wordcloud::wordcloud(word, n, max.words = 100))
+```
+
+This does suggest that I need to get rid of a few more common words beyond stop words (like "from" and "zzz").
+
+### Join dataframes 
+
+```{r}
+library(topicmodels)
+library(tm)
+
+#combine data frames and remove words that are just numbers
+#which occupied the first ~5,000 rows the first time I did this 
+#also removing stop words
+combined_tidy <- rbind(tidy_ham, tidy_spam) %>%
+  anti_join(stop_words, by = join_by(word)) %>%
+  filter(!str_detect(word, "[0-9]"))
+
+    
+tidy_counts <- combined_tidy %>%
+  count(email_id, word)
+
+dtm <- tidy_counts %>%
+  cast_dtm(email_id, word, n)
+
+# Run LDA to create a two-topic LDA model (span and ham)
+spam_lda <- LDA(dtm, k = 2, control = list(seed = 1234))
+
+
+```
+
+### Word-topic probabilities
+
+```{r}
+spam_topics <- tidy(spam_lda, matrix = "beta")
+spam_topics
+```
+
+### Graphing the top terms by topic
+
+#2 is ham and 1 is spam
+
+```{r}
+spam_top_terms <- spam_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+spam_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+```
+
+This doesn't give us a ton more than the word cloud did.
+
+### Analyzing email length
+
+```{r}
+set.seed(100)
+
+#taking a sample because this takes a long time
+unique_ids <- unique(tidy_spam$email_id)
+
+sampled_ids <- sample(unique_ids, 0.4 * length(unique_ids))
+
+#plotting histograms
+
+tidy_spam |> filter(email_id %in% sampled_ids) |>
+  count(email_id, name = "total_words") |>
+  ggplot(aes(x = total_words)) +
+  geom_histogram() + 
+  labs(Title = "Spam Email Length Frequency")
+
+unique_ids <- unique(tidy_ham$email_id)
+
+sampled_ids <- sample(unique_ids, 0.4 * length(unique_ids))
+
+tidy_ham |> filter(email_id %in% sampled_ids) |>
+  count(email_id, name = "total_words") |>
+  ggplot(aes(x = total_words)) +
+  geom_histogram() +
+  labs(Title = "Ham Email Length Frequency")
+
+
+
+#mean word counts
+spam_counts <- tidy_spam |>
+  count(email_id, name = "total_words") 
+
+spam_counts |> summarise(mean(total_words))
+
+ham_counts <- tidy_ham |>
+  count(email_id, name = "total_words") 
+
+ham_counts |> summarise(mean(total_words))
+```
+
+On average, Spam emails tend to be longer.
+
+Let's build a model.
+
+### Quanteda Naive Bayes classifier
+
+[This Quanteda tutorial](https://tutorials.quanteda.io/machine-learning/nb/) uses movie review data in a format similar to the spam/ham corpus. I've modified it below to only use a portion of the data.
+
+```{r}
+library(caret)
+library(quanteda)
+library(quanteda.textmodels)
+
+#data prep
+#combined spam_df and ham_df (these have the full text in a single cell)
+#create a new email id so everything has its own id once tokenized
+
+spam_ham <- rbind(spam_df, ham_df)
+
+spam_ham <- spam_ham |>
+  select(text, label) |>
+  mutate(email_id = row_number())
+
+#format as corpus (part of the quanteda package)
+spam_corpus <- corpus(spam_ham, text_field = "text")
+
+#this data set is huge, so we'll use about 10% to test 
+#generate 300 numbers without replacement (10% of the data)
+set.seed(300)
+id_train <- sample(1:3000, 300, replace = FALSE)
+head(id_train, 10)
+
+#separate set of 100 numbers for test set, so we don't test on training data
+remaining_ids <- setdiff(1:3000, id_train)
+
+
+id_test <- sample(remaining_ids, 100, replace = FALSE)
+
+
+spam_corpus$email_id <- 1:ndoc(spam_corpus)
+
+# tokenize texts
+toks_spam <- tokens(spam_corpus, remove_punct = TRUE, remove_number = TRUE) %>% 
+               tokens_remove(pattern = stopwords("en")) %>% 
+               tokens_wordstem()
+
+dfmt_spam <- dfm(toks_spam)
+
+# get training set
+spam_training <- dfm_subset(dfmt_spam, email_id %in% id_train)
+
+# get test set 
+spam_test <- dfm_subset(dfmt_spam, email_id %in% id_test)
+
+```
+
+Train the model:
+
+```{r}
+
+
+tmod_nb <- textmodel_nb(spam_training, spam_training$label)
+
+summary(tmod_nb)
+```
+
+```{r}
+#test the model
+dfmat_matched <- dfm_match(spam_test, features = featnames(spam_training))
+
+#inspect how well the classification worked.
+#Also, the point at which I stopped changing the labels from the sample code
+
+actual_class <- dfmat_matched$label
+predicted_class <- predict(tmod_nb, newdata = dfmat_matched)
+
+#the mini confusion matrix
+tab_class <- table(actual_class, predicted_class)
+tab_class
+```
+
+Confusion matrix (positive class is ham):
+
+```{r}
+confusionMatrix(tab_class)
+
+confusionMatrix(tab_class, mode = "everything")
+
+```
+
+90% accuracy, 79 true positives, 8 false negatives, 2 false positives, and 11 true negatives. As a spam filter, 8 non-spam emails are going into the spam folder and 2 spam messages sneak through. No one wants 9 legitimate emails out of 87 to go in their spam filter. I wonder if the results woud be better if the sample size were larger.
+
+In retrospect, I could have taken other steps to prep the data. I didn't filter out numbers, short words (though these are filtered by stop words), or nonsense strings, which appear frequently in older email messages.
+
+### Sources
+
+Silge, J., & Robinson, D. (2017). *Text mining with R: A tidy approach*. O'Reilly Media.
+
+Watanabe, K & Müller, S. *Quanteda Tutorials.* <https://tutorials.quanteda.io/machine-learning/nb/>.
+
+Google Gemini. (2026). Gemini 3 Flash \[Large language model\].https://gemini.google.com. Accessed May 1, 2026.
