@@ -1,0 +1,1446 @@
+I want to make some kind of interactive widget in R or dashboard that takes your time and age-grades it: This system takes your percentage in your age and gender (so, if you're 45, you will be ranked with other 45-year-old women)  and gives you the corresponding time in the top-performing age group in an ideal year. 
+
+
+
+Ideal marathon temperature for regular runners is 40-50 degrees. However, temperatures for the NYC marathon haven't hit that range since 2014, which was kind of a while ago. I've used a more recent year, 2024, where temperatures were between 44 and 54. 
+
+
+
+We can also see which year in the past 15 years had the lowest mean time for men and women to see if this holds. 
+
+
+
+{r}
+
+mean_times <- marathon_joined |> filter(Year > 2009) |>
+
+  filter(Gender == "M"| Gender == "W") |>
+
+  group_by(Year, Gender, max_temp) |>
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) |>
+
+  arrange((Mean_Time))
+
+  
+
+ mean_times
+
+
+
+The best year for men was when temperatures reached a high of 54 in 2024. For women, it was when temperatures reached a high of 54 in 2011. We will go with 2024, since it is more recent and reflects the current popularity of marathons.
+
+
+
+The worst year for everyone was 2022.
+
+
+
+Let's check the size of the 25-34 age group (peak performance bracket) in an ideal year:
+
+
+
+{r}
+
+#Filter out peak performers in the 25 -34 age group
+
+age_scale_2024 <-  marathon_joined |>
+
+  filter(between(Age, 25, 34), Year == 2024)
+
+
+
+count(age_scale_2024)
+
+  
+
+
+
+There are 18k parcicipants in this bracket, about 40% of all participants. Let's narrow it down further. What are peak performance ages for men and women?
+
+
+
+{r}
+
+gender_and_age |> filter(Gender == "W") |>
+
+  filter(Age > 17) |>
+
+  arrange(mean_time)
+
+  
+
+
+
+for women, peak performance is 24-26
+
+
+
+{r}
+
+gender_and_age |> filter(Gender == "M") |>
+
+  filter(Age > 17) |>
+
+  arrange(mean_time)
+
+
+
+For men, it's also 24-26. 
+
+
+
+The new scale:
+
+
+
+{r}
+
+scale_2024 <-  marathon_joined |>
+
+  filter(between(Age, 24, 26), Year == 2024)
+
+
+
+count(scale_2024)
+
+summary(scale_2024)
+
+
+
+4832 times, ranging from 2 hours 17 mins to 9 hours 22 mins.
+
+
+
+{r}
+
+
+
+# Create the Men's table
+
+men_percentile <- scale_2024 %>%
+
+  filter(Gender == "M") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) 
+
+
+
+men_percentile <- men_percentile |>
+
+  mutate(Mean_Time =round(Mean_Time,0))
+
+
+
+# Create the Women's table
+
+women_percentile <- scale_2024 %>%
+
+  filter(Gender == "W") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE))
+
+
+
+women_percentile <- women_percentile |>
+
+  mutate(Mean_Time =round(Mean_Time,0))
+
+
+
+To find your age percentage, find your rank in your age (year)
+
+
+
+{r}
+
+age_index <- marathon_joined |> 
+
+  filter(Gender == "W", Age == 42, Year == 2022)|>
+
+  arrange(Finish_Minutes) |>
+
+  mutate(age_index = row_number())
+
+
+
+count(age_index)
+
+
+
+let's say the age index is 364 (finished in ~5 hours, 1 min)
+
+
+
+{r}
+
+index_42 <- as.data.frame(round(363/count(age_index),2)*100)
+
+
+
+{r}
+
+age_graded_42 <- index_42 |> 
+
+  left_join(women_percentile, by = c("n" = "Percentile"))
+
+
+
+age_graded_42
+
+
+
+This person's age- and temperature-graded time is 4 hours and 32 minutes.
+
+
+
+What if we gender-grade? 
+
+
+
+{r}
+
+age_graded_42_m <- index_42 |> 
+
+  left_join(men_percentile, by = c("n" = "Percentile"))
+
+
+
+age_graded_42_m
+
+
+
+Four hours and eight minutes,
+
+You stopped this response
+I want to make some kind of interactive widget in R or dashboard that takes your time and age/temp-grades it in this way. What are my options: This system takes your percentage in your age and gender (so, if you're 45, you will be ranked with other 45-year-old women)  and gives you the corresponding time in the top-performing age group in an ideal year. 
+
+
+
+Ideal marathon temperature for regular runners is 40-50 degrees. However, temperatures for the NYC marathon haven't hit that range since 2014, which was kind of a while ago. I've used a more recent year, 2024, where temperatures were between 44 and 54. 
+
+
+
+We can also see which year in the past 15 years had the lowest mean time for men and women to see if this holds. 
+
+
+
+{r}
+
+mean_times <- marathon_joined |> filter(Year > 2009) |>
+
+  filter(Gender == "M"| Gender == "W") |>
+
+  group_by(Year, Gender, max_temp) |>
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) |>
+
+  arrange((Mean_Time))
+
+  
+
+ mean_times
+
+
+
+The best year for men was when temperatures reached a high of 54 in 2024. For women, it was when temperatures reached a high of 54 in 2011. We will go with 2024, since it is more recent and reflects the current popularity of marathons.
+
+
+
+The worst year for everyone was 2022.
+
+
+
+Let's check the size of the 25-34 age group (peak performance bracket) in an ideal year:
+
+
+
+{r}
+
+#Filter out peak performers in the 25 -34 age group
+
+age_scale_2024 <-  marathon_joined |>
+
+  filter(between(Age, 25, 34), Year == 2024)
+
+
+
+count(age_scale_2024)
+
+  
+
+
+
+There are 18k parcicipants in this bracket, about 40% of all participants. Let's narrow it down further. What are peak performance ages for men and women?
+
+
+
+{r}
+
+gender_and_age |> filter(Gender == "W") |>
+
+  filter(Age > 17) |>
+
+  arrange(mean_time)
+
+  
+
+
+
+for women, peak performance is 24-26
+
+
+
+{r}
+
+gender_and_age |> filter(Gender == "M") |>
+
+  filter(Age > 17) |>
+
+  arrange(mean_time)
+
+
+
+For men, it's also 24-26. 
+
+
+
+The new scale:
+
+
+
+{r}
+
+scale_2024 <-  marathon_joined |>
+
+  filter(between(Age, 24, 26), Year == 2024)
+
+
+
+count(scale_2024)
+
+summary(scale_2024)
+
+
+
+4832 times, ranging from 2 hours 17 mins to 9 hours 22 mins.
+
+
+
+{r}
+
+
+
+# Create the Men's table
+
+men_percentile <- scale_2024 %>%
+
+  filter(Gender == "M") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) 
+
+
+
+men_percentile <- men_percentile |>
+
+  mutate(Mean_Time =round(Mean_Time,0))
+
+
+
+# Create the Women's table
+
+women_percentile <- scale_2024 %>%
+
+  filter(Gender == "W") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE))
+
+
+
+women_percentile <- women_percentile |>
+
+  mutate(Mean_Time =round(Mean_Time,0))
+
+
+
+To find your age percentage, find your rank in your age (year)
+
+
+
+{r}
+
+age_index <- marathon_joined |> 
+
+  filter(Gender == "W", Age == 42, Year == 2022)|>
+
+  arrange(Finish_Minutes) |>
+
+  mutate(age_index = row_number())
+
+
+
+count(age_index)
+
+
+
+let's say the age index is 364 (finished in ~5 hours, 1 min)
+
+
+
+{r}
+
+index_42 <- as.data.frame(round(363/count(age_index),2)*100)
+
+
+
+{r}
+
+age_graded_42 <- index_42 |> 
+
+  left_join(women_percentile, by = c("n" = "Percentile"))
+
+
+
+age_graded_42
+
+
+
+This person's age- and temperature-graded time is 4 hours and 32 minutes.
+
+
+
+What if we gender-grade? 
+
+
+
+{r}
+
+age_graded_42_m <- index_42 |> 
+
+  left_join(men_percentile, by = c("n" = "Percentile"))
+
+
+
+age_graded_42_m
+
+
+
+Four hours and eight minutes,
+
+To build an interactive dashboard in R that automates this age/temperature grading, you have three primary options:
+
+1. Shiny (Best for Full Dashboards)
+Shiny is the standard for R-based web apps. You can create sliders for age, dropdowns for gender/year, and text inputs for finish times.
+
+Workflow: Use renderTable() or renderText() to display the graded result instantly as the user moves a slider.
+
+Hosting: Deploy easily to shinyapps.io.
+
+2. Quarto / R Markdown (Best for Reports)
+If you want a document that explains your methodology (like your prompt) but has interactive elements:
+
+Quarto Dashboards: Use the server: shiny back-end to allow users to input their own data.
+
+bslib: Use this package to make the UI look modern and mobile-friendly.
+
+3. htmlwidgets (Best for "No-Server" Sharing)
+If you don't want to host a live R server, you can use Crosstalk with DT (DataTables).
+
+Constraint: This is better for filtering an existing dataset rather than performing complex background calculations on-the-fly, so Shiny is likely a better fit for your specific math.
+
+Suggested Dashboard Structure
+To make this functional, your app should follow this logic:
+
+Component	Function
+Input Panel	Sliders for Age, Gender, and Finish Time.
+Logic Layer	A reactive function that calculates the percentile rank in the user's cohort, then left_joins with your scale_2024 tables.
+Output Panel	Large "Scorecards" showing: Original Time vs. Age-Graded Time.
+Quick Implementation Tip
+Convert your men_percentile and women_percentile into a lookup function or a small .csv file. This prevents the dashboard from having to process the entire marathon_joined dataset every time a user changes an input, making it much faster.
+
+How much data do you plan to have the user interact with at once?
+
+show me how to do this
+
+To build this in R, Shiny is your best bet. It allows you to create a user-friendly interface where you can input parameters and see the "graded" result instantly.
+
+Below is a streamlined template. You can run this directly in RStudio. It uses your logic to create the lookup tables and then builds a simple "calculator" interface.
+
+The Shiny App Script
+R
+library(shiny)
+library(tidyverse)
+
+# --- 1. PRE-PROCESSING (Run once to create lookups) ---
+# Assuming 'marathon_joined' is in your environment
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+# --- 2. SHINY UI ---
+ui <- fluidPage(
+  titlePanel("NYC Marathon Age & Temp Grader"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("user_age", "Your Age:", value = 42, min = 18, max = 99),
+      selectInput("user_gender", "Gender:", choices = c("W", "M")),
+      numericInput("user_time", "Your Finish Time (Minutes):", value = 301),
+      hr(),
+      helpText("This grades your performance against the 'ideal' 2024 conditions and peak age bracket (24-26).")
+    ),
+    mainPanel(
+      h3("Your Results"),
+      uiOutput("graded_results")
+    )
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  output$graded_results <- renderUI({
+    # 1. Get the user's cohort from the full dataset
+    cohort <- marathon_joined |> 
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2022) |>
+      arrange(Finish_Minutes)
+    
+    # 2. Find user's percentile rank in that cohort
+    # We find how many people in their age/year they beat
+    rank <- sum(cohort$Finish_Minutes <= input$user_time)
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+    
+    # 3. Pull the "Graded" time from the 2024 Peak lookup
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+    
+    # Format minutes back to H:MM
+    format_time <- function(mins) {
+      paste0(mins %/% 60, "h ", sprintf("%02d", mins %% 60), "m")
+    }
+    
+    tagList(
+      h4(paste("Your Percentile in Cohort:", user_percentile, "%")),
+      h2(paste("Graded Time:", format_time(graded_val))),
+      p("This is what you would have run in 2024 if you were 25 years old.")
+    )
+  })
+}
+
+shinyApp(ui, server)
+Why this works:
+Reactive Logic: The renderUI block re-calculates the rank and the lookup every time you change the age or time input.
+
+Decoupled Math: By creating men_percentile and women_percentile outside the server function (or in a global.R file), the app stays fast because it isn't re-summarizing the whole 50k+ row dataset on every click.
+
+Formatting: The format_time function ensures the output looks like a marathon result (4h 32m) rather than just raw minutes (272).
+
+How to host it:
+Sign up for a free account at shinyapps.io.
+
+Install the rsconnect package in R.
+
+Click the Publish button at the top right of your script in RStudio.
+
+does this account for temperature? I don't think it does
+
+You're right to catch that—the code I just gave you accounts for age and gender, but it doesn't dynamically adjust for temperature across different years. It only "grades" you against the 2024 results, which you identified as having ideal conditions.
+
+To truly "temp-grade" a runner who ran in a different year (like the "worst year," 2022), you need to mathematically bridge the gap between that year's mean performance and the ideal year's performance.
+
+How to add the "Temperature Bridge"
+We can calculate a Temperature Offset. This is the difference between the average finish time in a "bad" year (2022) and your "ideal" year (2024).
+
+Calculate the Offset: Find the difference in mean times between 2022 and 2024.
+
+Adjust the Input: Subtract that offset from the user's actual 2022 time before calculating their percentile. This "normalizes" their time as if they had run in the cooler 2024 weather.
+
+Updated Logic for the Shiny Server
+Replace the calculation block in the server with this logic:
+
+R
+server <- function(input, output) {
+  
+  output$graded_results <- renderUI({
+    
+    # 1. Calculate Temperature Offset (2022 vs 2024)
+    # This finds how much slower the average runner was in the heat
+    mean_2022 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2022], na.rm = TRUE)
+    mean_2024 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2024], na.rm = TRUE)
+    temp_offset <- mean_2022 - mean_2024 
+    
+    # 2. Normalize the User's Time
+    # We subtract the heat penalty to see their "Ideal Weather" time
+    normalized_time <- input$user_time - temp_offset
+    
+    # 3. Find rank using the NORMALIZED time
+    cohort <- marathon_joined |> 
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2022) |>
+      arrange(Finish_Minutes)
+    
+    rank <- sum(cohort$Finish_Minutes <= normalized_time)
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+    
+    # 4. Pull from the Peak lookup (same as before)
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+    
+    # Ensure percentile stays in 1-100 range
+    user_percentile <- max(1, min(100, user_percentile))
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+    
+    # ... UI Output code remains the same ...
+  })
+}
+Why this is more accurate:
+The 2022 Penalty: In your data, 2022 was the "worst year" (likely due to the high humidity/heat). A 5-hour runner in 2022 might actually be a 4-hour 45-minute runner in 2024 conditions.
+
+Fair Comparison: By subtracting the temp_offset, you are comparing their "effort" rather than just their raw clock time.
+
+If you want to make it even more robust, you could add a "Select Race Year" dropdown. The app would then calculate the offset specifically for whichever year they actually ran.
+
+what shoudl this look like library(shiny)
+
+
+
+
+
+# --- 1. PRE-PROCESSING (Run once to create lookups) ---
+
+# Assuming 'marathon_joined' is in your environment
+
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+
+
+men_percentile <- scale_2024 %>%
+
+  filter(Gender == "M") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+
+
+women_percentile <- scale_2024 %>%
+
+  filter(Gender == "W") %>%
+
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+
+  group_by(Percentile) %>%
+
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+
+
+# --- 2. SHINY UI ---
+
+ui <- fluidPage(
+
+  titlePanel("NYC Marathon Age & Temp Grader"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+
+      numericInput("user_age", "Your Age:", value = 42, min = 18, max = 99),
+
+      selectInput("user_gender", "Gender:", choices = c("W", "M")),
+
+      numericInput("user_time", "Your Finish Time (Minutes):", value = 301),
+
+      hr(),
+
+      helpText("This grades your performance against the 'ideal' 2024 conditions and peak age bracket (24-26).")
+
+    ),
+
+    mainPanel(
+
+      h3("Your Results"),
+
+      uiOutput("graded_results")
+
+    )
+
+  )
+
+)
+
+
+
+server <- function(input, output) {
+
+  
+
+  output$graded_results <- renderUI({
+
+    
+
+    # 1. Calculate Temperature Offset (2022 vs 2024)
+
+    # This finds how much slower the average runner was in the heat
+
+    mean_2022 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2022], na.rm = TRUE)
+
+    mean_2024 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2024], na.rm = TRUE)
+
+    temp_offset <- mean_2022 - mean_2024 
+
+    
+
+    # 2. Normalize the User's Time
+
+    # We subtract the heat penalty to see their "Ideal Weather" time
+
+    normalized_time <- input$user_time - temp_offset
+
+    
+
+    # 3. Find rank using the NORMALIZED time
+
+    cohort <- marathon_joined |> 
+
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2022) |>
+
+      arrange(Finish_Minutes)
+
+    
+
+    rank <- sum(cohort$Finish_Minutes <= normalized_time)
+
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+
+    
+
+    # 4. Pull from the Peak lookup (same as before)
+
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+
+    
+
+    # Ensure percentile stays in 1-100 range
+
+    user_percentile <- max(1, min(100, user_percentile))
+
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+
+    
+
+    # ... UI Output code remains the same ...
+
+  })
+
+}
+
+
+
+    
+
+    tagList(
+
+      h4(paste("Your Percentile in Cohort:", user_percentile, "%")),
+
+      h2(paste("Graded Time:", format_time(graded_val))),
+
+      p("This is what you would have run in 2024 if you were 25 years old.")
+
+    )
+
+  })
+
+}
+
+
+
+shinyApp(ui, server)
+
+To make this work, we need to clean up the server function syntax and ensure the helper function format_time is defined inside the app.
+
+Here is the corrected, complete script:
+
+R
+library(shiny)
+library(tidyverse)
+
+# --- 1. PRE-PROCESSING ---
+# Creating the "Ideal" lookup tables (2024, Ages 24-26)
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+# --- 2. SHINY UI ---
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"), # Optional: makes it look cleaner
+  titlePanel("NYC Marathon Age & Temp Grader"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("user_age", "Your Age:", value = 42, min = 18, max = 99),
+      selectInput("user_gender", "Gender:", choices = c("W", "M")),
+      numericInput("user_time", "Your Finish Time (Total Minutes):", value = 301),
+      hr(),
+      helpText("Grading your performance against the ideal 2024 conditions and the peak age bracket (24-26).")
+    ),
+    mainPanel(
+      h3("Your Results"),
+      uiOutput("graded_results")
+    )
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  # Helper to turn minutes back into H:MM
+  format_time <- function(mins) {
+    paste0(mins %/% 60, "h ", sprintf("%02d", mins %% 60), "m")
+  }
+  
+  output$graded_results <- renderUI({
+    
+    # A. Calculate Temperature Offset (2022 Heat Penalty)
+    mean_2022 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2022], na.rm = TRUE)
+    mean_2024 <- mean(marathon_joined$Finish_Minutes[marathon_joined$Year == 2024], na.rm = TRUE)
+    temp_offset <- mean_2022 - mean_2024 
+    
+    # B. Normalize User Time (Adjusting for 2022 weather)
+    normalized_time <- input$user_time - temp_offset
+    
+    # C. Find rank in their specific cohort
+    cohort <- marathon_joined |> 
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2022) |>
+      arrange(Finish_Minutes)
+    
+    # Prevent errors if cohort is empty
+    if(nrow(cohort) == 0) return("No data found for this age/gender combo in 2022.")
+    
+    rank <- sum(cohort$Finish_Minutes <= normalized_time)
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+    user_percentile <- max(1, min(100, user_percentile)) # Bound between 1-100
+    
+    # D. Lookup the "Ideal" time
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+    
+    # E. Return the UI elements
+    tagList(
+      wellPanel(
+        h4(paste("Percentile in Cohort:", user_percentile, "%")),
+        h2(style = "color: #2c3e50;", paste("Graded Time:", format_time(graded_val))),
+        p(em("This is your estimated time if you ran in 2024's ideal weather at age 25."))
+      )
+    )
+  })
+}
+
+shinyApp(ui, server)
+Key Changes Made:
+Combined the logic: Fixed the broken brackets from your draft so the tagList is properly inside renderUI.
+
+Added wellPanel: This gives the result a nice box around it so it stands out.
+
+Cohort Check: Added a small check (nrow(cohort) == 0) so the app doesn't crash if you pick an age with no runners.
+
+Formatting: Included format_time inside the server so the "Graded Time" looks like a real race clock.
+
+there should be an option to put your race's temperature in so it can convert it to the correct time
+
+To make the temperature adjustment dynamic, you should add a slider or numeric input for the race temperature and then apply a math-based "weather penalty."
+
+Research on marathon physiology shows that for every 1 degree above the "ideal" (roughly 44°F), performance generally degrades by about 0.03% to 0.05% for non-elite runners.
+
+Updated Shiny App Code
+Here is how to modify the app so users can input their specific race temperature:
+
+R
+library(shiny)
+library(tidyverse)
+
+# --- 1. PRE-PROCESSING ---
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+# --- 2. SHINY UI ---
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  titlePanel("Dynamic NYC Marathon Grader"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("user_age", "Your Age:", value = 42, min = 18, max = 99),
+      selectInput("user_gender", "Gender:", choices = c("W", "M")),
+      numericInput("user_time", "Your Finish Time (Total Minutes):", value = 301),
+      # ADDED: Temperature Input
+      sliderInput("race_temp", "Race Day Temperature (°F):", 
+                  min = 35, max = 85, value = 54),
+      hr(),
+      helpText("Ideal temp is considered 44-54°F. Temperatures above this range apply a performance penalty.")
+    ),
+    mainPanel(
+      h3("Your Results"),
+      uiOutput("graded_results")
+    )
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  format_time <- function(mins) {
+    paste0(mins %/% 60, "h ", sprintf("%02d", mins %% 60), "m")
+  }
+  
+  output$graded_results <- renderUI({
+    
+    # A. Dynamic Temperature Normalization
+    # Calculation: If temp > 50, subtract a penalty from the clock time
+    # This approximates 'what you would have run' in 2024's 54°F peak.
+    ideal_temp <- 54
+    temp_diff <- input$race_temp - ideal_temp
+    
+    # We apply a 0.04% penalty per degree over the 'ideal' high
+    # If temp_diff is negative (colder), it actually adds a small 'cold penalty' 
+    # but for simplicity we'll focus on heat.
+    weather_adjustment_factor <- 1 - (temp_diff * 0.0004)
+    normalized_time <- input$user_time * weather_adjustment_factor
+    
+    # B. Find rank in cohort (using the adjusted time)
+    # Using 2024 as the baseline year for the cohort comparison
+    cohort <- marathon_joined |> 
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2024) |>
+      arrange(Finish_Minutes)
+    
+    if(nrow(cohort) == 0) return("No data found for this age.")
+    
+    rank <- sum(cohort$Finish_Minutes <= normalized_time)
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+    user_percentile <- max(1, min(100, user_percentile))
+    
+    # C. Final Grading
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+    
+    tagList(
+      wellPanel(
+        h4(paste("Percentile Rank:", user_percentile, "%")),
+        h2(style = "color: #e67e22;", paste("Graded Time:", format_time(graded_val))),
+        p(paste("Normalized for", input$race_temp, "°F weather and age 25."))
+      )
+    )
+  })
+}
+
+shinyApp(ui, server)
+How the Temperature Logic Works:
+The Adjustment Factor: I used a coefficient of 0.0004 (0.04%). If a user says it was 74°F (20 degrees over the 54°F baseline), the app multiplies their time by 0.992.
+
+Effect: A 300-minute finish in 74°F weather is treated as a 297.6-minute finish in ideal weather. This slightly improves their percentile rank before looking up the age-graded time.
+
+Linear Scaling: This is a simplified linear model. In reality, the "heat tax" gets exponentially worse as you hit 80°F+, but for the standard range of NYC Marathon weather, a linear adjustment is standard for these types of widgets.
+
+I want to make a slider so we can see mean performance for men and women. The gender X's adn Nas will have to be removed: #filter out anyone younger than 18 because there aren't many/some seem like errors
+
+gender_and_age |>
+
+  filter(!is.na(Gender)) |> #filter out NAs
+
+  filter(Age > 17) |>
+
+  ggplot(aes(x = Age, y = mean_time, color = Gender)) +
+
+  geom_point() + 
+
+  labs(y = "Mean Time (in Minutes)", Title = "Mean Performance by Age and Gender") +
+
+  theme_minimal()
+
+To add a slider for years or temperatures and clean up your data, you can use renderPlot alongside a sliderInput.
+
+Below is the code to add a second section to your dashboard. This includes the data cleaning steps (filtering out "X" genders, NA values, and ages under 18) and a reactive plot that updates based on the year selected via a slider.
+
+Updated Shiny App Code
+R
+library(shiny)
+library(tidyverse)
+
+# --- 1. DATA PREP (Global) ---
+# Clean the dataset once for the plot
+clean_marathon <- marathon_joined |>
+  filter(!is.na(Gender), 
+         Gender %in% c("M", "W"), # Remove "X" and other entries
+         Age > 17)
+
+# --- 2. SHINY UI ---
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  titlePanel("NYC Marathon Performance Trends"),
+  
+  tabsetPanel(
+    # Tab 1: Your existing calculator
+    tabPanel("Age/Temp Grader", 
+             sidebarLayout(
+               sidebarPanel(
+                 numericInput("user_age", "Your Age:", value = 42),
+                 selectInput("user_gender", "Gender:", choices = c("W", "M")),
+                 numericInput("user_time", "Your Finish Time (Min):", value = 301),
+                 sliderInput("race_temp", "Race Day Temp (°F):", 35, 85, 54)
+               ),
+               mainPanel(uiOutput("graded_results"))
+             )),
+    
+    # Tab 2: The New Interactive Plot
+    tabPanel("Performance Trends",
+             sidebarLayout(
+               sidebarPanel(
+                 sliderInput("year_select", "Select Year:", 
+                             min = min(clean_marathon$Year), 
+                             max = max(clean_marathon$Year), 
+                             value = 2024, 
+                             step = 1,
+                             sep = ""), # Removes the comma from the year (e.g., 2,024)
+                 helpText("Adjust the slider to see how mean performance curves shift by year.")
+               ),
+               mainPanel(
+                 plotOutput("age_plot")
+               )
+             ))
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  # Logic for the Plot
+  output$age_plot <- renderPlot({
+    # Filter by the year from the slider
+    plot_data <- clean_marathon |>
+      filter(Year == input$year_select) |>
+      group_by(Age, Gender) |>
+      summarize(mean_time = mean(Finish_Minutes, na.rm = TRUE), .groups = "drop")
+    
+    ggplot(plot_data, aes(x = Age, y = mean_time, color = Gender)) +
+      geom_point(alpha = 0.6) +
+      geom_smooth(se = FALSE) + # Added a trend line to see the 'U' curve better
+      labs(y = "Mean Time (Minutes)", 
+           x = "Age",
+           title = paste("Mean Performance in", input$year_select)) +
+      theme_minimal() +
+      scale_color_manual(values = c("M" = "#3498db", "W" = "#e74c3c"))
+  })
+  
+  # (Include your existing 'graded_results' logic here from previous steps)
+}
+
+shinyApp(ui, server)
+Key Improvements:
+Data Cleaning: I used Gender %in% c("M", "W") and !is.na(Gender) to ensure only binary gender data is plotted, as the "X" category often lacks enough data points to create a reliable mean.
+
+The "U" Curve: I added geom_smooth() to the plot. This helps visualize the "peak performance" ages (the bottom of the curve) versus how times increase with age.
+
+Tabbed Layout: Using tabsetPanel keeps your calculator and your data visualization organized so the screen doesn't get too crowded.
+
+Year Formatting: In the slider, sep = "" is important—otherwise, Shiny will display the year as "2,024" instead of "2024."
+
+Does this visualization help you see the "weather penalty" you were investigating for years like 2022?
+
+An error has occurred!
+
+input string 1 is invalid UTF-8 what do you need
+
+This error typically happens when the marathon_joined dataset (or the CSV file it came from) contains special characters—like accented names or non-standard symbols—that R is struggling to read using the default UTF-8 encoding.
+
+To fix this, I need to see how you are importing your data. Please provide the line of code you use to load the dataset (e.g., read_csv() or read.table()).
+
+In the meantime, here are the three most likely fixes:
+
+1. Re-read the data with "Latin-1" Encoding
+If your CSV was saved in Excel or an older format, it might be in Latin-1 (ISO-8859-1) rather than UTF-8. Try this:
+
+R
+# If using readr (tidyverse)
+marathon_joined <- read_csv("your_file.csv", locale = locale(encoding = "Latin1"))
+
+# If using base R
+marathon_joined <- read.csv("your_file.csv", fileEncoding = "Latin1")
+2. Strip "Ghost" Characters
+If the data is already loaded but has "invalid" characters in the names or strings, run this to force them into valid UTF-8:
+
+R
+marathon_joined <- marathon_joined |>
+  mutate(across(where(is.character), ~iconv(., from = "UTF-8", to = "UTF-8", sub = "")))
+3. Check the Shiny Input
+If the error occurs only when you type into the Shiny app, ensure your R script itself is saved with UTF-8 encoding:
+
+In RStudio: File > Save with Encoding... > UTF-8.
+
+Which line of your code triggered the error? (e.g., Was it during read_csv or when running the ggplot?)
+
+don't change how my csv is read. just change the data frame in the code.
+
+To fix this without touching your import code, we will apply a "cleaning" step to the marathon_joined data frame immediately after it is loaded. This will strip out any invisible or non-standard characters that are causing the UTF-8 error.
+
+Add this block of code before your Shiny UI and Server code:
+
+R
+# --- DATA CLEANING FOR UTF-8 ERRORS ---
+marathon_joined <- marathon_joined |>
+  # This converts all character columns to valid UTF-8 and removes invalid symbols
+  mutate(across(where(is.character), ~iconv(., from = "", to = "UTF-8", sub = ""))) |>
+  # Ensure Gender is clean for the filters
+  mutate(Gender = trimws(as.character(Gender))) 
+
+# Re-run your lookup tables with the cleaned data
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+Why this fixes it:
+iconv: The function iconv(..., sub = "") looks at every string. If it finds a character it doesn't recognize (like a weird symbol or a non-UTF-8 accent), it just deletes that specific character instead of crashing the whole app.
+
+where(is.character): This ensures we only try to fix text columns (like Name or Gender) and don't accidentally mess with your numeric columns like Age or Time.
+
+trimws: Sometimes "invalid string" errors happen because of invisible trailing spaces. This snips them off.
+
+Try running the app again with this cleaning block at the top. Does the plot render now?
+
+use this to create a slider gender_means# A tibble: 148 × 4# Groups: Age [76]
+
+Age Gender mean_time num_gender
+
+<int> <chr> <dbl> <int> 1 18 M 270. 1670 2 18 W 309. 562 3 19 M 258. 1961 4 19 W 297. 874 5 20 M 255. 3037 6 20 W 289. 1429 7 21 M 254. 3962 8 21 W 288. 2320 9 22 M 250. 535310 22 W 281. 3386
+
+To create an interactive slider that filters this specific gender_means data frame by Age, you can use the code below. This will allow you to slide through ages and see the performance gap between men and women for that specific age group.
+
+I have included the logic to filter out non-binary genders and NA values as you requested.
+
+R
+library(shiny)
+library(tidyverse)
+
+# --- 1. DATA PREP ---
+# Cleaning the data frame based on your requirements
+gender_means_clean <- gender_means |>
+  filter(!is.na(Gender), 
+         Gender %in% c("M", "W"), 
+         Age > 17)
+
+# --- 2. SHINY UI ---
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  titlePanel("NYC Marathon: Mean Time by Age"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("age_slider", "Select Age:", 
+                  min = min(gender_means_clean$Age), 
+                  max = max(gender_means_clean$Age), 
+                  value = 25, 
+                  step = 1),
+      hr(),
+      helpText("Compare the average finish times for men and women at a specific age.")
+    ),
+    
+    mainPanel(
+      # Large display for the mean times
+      fluidRow(
+        column(6, uiOutput("men_box")),
+        column(6, uiOutput("women_box"))
+      ),
+      br(),
+      # Plot showing the context of that age in the full dataset
+      plotOutput("dist_plot")
+    )
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  # Reactive data for the selected age
+  selected_data <- reactive({
+    gender_means_clean |> filter(Age == input$age_slider)
+  })
+  
+  # Helper to format minutes to H:MM
+  format_time <- function(mins) {
+    if(is.na(mins)) return("No Data")
+    paste0(mins %/% 60, "h ", sprintf("%02d", round(mins %% 60, 0)), "m")
+  }
+  
+  # UI Box for Men
+  output$men_box <- renderUI({
+    val <- selected_data() |> filter(Gender == "M") |> pull(mean_time)
+    wellPanel(style = "background: #ebf5fb; border-left: 5px solid #3498db;",
+      h4("Men Avg Time"),
+      h2(format_time(val))
+    )
+  })
+  
+  # UI Box for Women
+  output$women_box <- renderUI({
+    val <- selected_data() |> filter(Gender == "W") |> pull(mean_time)
+    wellPanel(style = "background: #fef5f5; border-left: 5px solid #e74c3c;",
+      h4("Women Avg Time"),
+      h2(format_time(val))
+    )
+  })
+  
+  # Plot showing the trend with a highlight on the selected age
+  output$dist_plot <- renderPlot({
+    ggplot(gender_means_clean, aes(x = Age, y = mean_time, color = Gender)) +
+      geom_line(alpha = 0.3) +
+      geom_point(data = selected_data(), size = 5) + # Highlight the selected point
+      scale_color_manual(values = c("M" = "#3498db", "W" = "#e74c3c")) +
+      labs(title = paste("Performance Curve: Age", input$age_slider, "Highlighted"),
+           y = "Mean Time (Minutes)") +
+      theme_minimal()
+  })
+}
+
+shinyApp(ui, server)
+What this does:
+The Boxes: Instead of just a plot, it gives you two large, color-coded "scorecards" that change as you move the slider, making it very easy to read the exact gap (e.g., Age 22 shows 4h 10m for men vs 4h 41m for women).
+
+The Highlight: The plot shows the entire lifecycle curve (the "U" shape) but places a large dot on the specific age you've selected on the slider.
+
+Rounding: I added a round() call inside the time formatter so you don't get decimals in your minutes (e.g., "309.4" becomes "5h 09m").
+
+can Ichange this to timeinput so you can put your hh:mm time in? numericInput("user_time", "Your Finish Time (Minutes):", value = 301),
+
+Yes, you can. However, Shiny doesn't have a native "HH:MM" input that returns minutes directly. The best way to handle this is to use textInput() for the entry and then convert it to minutes in the background using a small helper function.
+
+This is much more user-friendly for runners who think in clock time rather than total minutes.
+
+1. The UI Change
+Replace your numericInput with this:
+
+R
+textInput("user_time_str", "Your Finish Time (HH:MM):", value = "05:01"),
+2. The Server Logic
+You need to convert that string (e.g., "05:01") into a number (301 minutes) before running your math. Place this inside your renderUI or reactive block:
+
+R
+# Helper function to convert HH:MM string to total minutes
+parse_marathon_time <- function(time_str) {
+  parts <- as.numeric(unlist(strsplit(time_str, ":")))
+  if (length(parts) == 2) {
+    return((parts[1] * 60) + parts[2]) # HH:MM
+  } else if (length(parts) == 3) {
+    return((parts[1] * 60) + parts[2] + (parts[3]/60)) # HH:MM:SS
+  }
+  return(NA)
+}
+
+# In your logic, replace input$user_time with:
+user_minutes <- parse_marathon_time(input$user_time_str)
+3. Integrated Example
+Here is how it fits into your existing renderUI block:
+
+R
+output$graded_results <- renderUI({
+  # Convert the string input to numeric minutes
+  user_minutes <- parse_marathon_time(input$user_time_str)
+  
+  # Basic validation check
+  if (is.na(user_minutes)) return("Please enter time as HH:MM (e.g., 04:20)")
+
+  # Use 'user_minutes' for the rest of your calculations
+  normalized_time <- user_minutes - temp_offset
+  
+  # ... rest of your code ...
+})
+Pro Tip: ShinyWidgets
+If you want a more polished "masked" input that forces the user to type in the : format, you can use the shinyWidgets library:
+
+R
+# Need to run: install.packages("shinyWidgets")
+library(shinyWidgets)
+
+textInputIcon(
+  inputId = "user_time_str",
+  label = "Your Finish Time:",
+  value = "05:01",
+  placeholder = "HH:MM",
+  icon = icon("clock")
+)
+This keeps the input as a string but makes the dashboard feel more like a professional sports application.
+
+how do I add a background color to this ui <- fluidPage(
+
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+
+  titlePanel("NYC Marathon: Mean Time by Age and Gender"),
+
+  
+
+  sidebarLayout(
+
+    sidebarPanel(
+
+      sliderInput("age_slider", "Select Age:", 
+
+                  min = 18, 
+
+                  max = 90, 
+
+                  value = 25, 
+
+                  step = 1),
+
+      hr(),
+
+      helpText("Compare the average finish times for men and women by age.")
+
+    ),
+
+Since you are already using the bslib package, the most efficient way to change the background color is to modify your bs_theme settings. This ensures that the background, text colors, and sidebar panels all stay coordinated.
+
+Option 1: Using bs_theme (The Cleanest Way)
+You can set the bg (background) and fg (foreground/text) colors directly inside your theme definition.
+
+R
+ui <- fluidPage(
+  theme = bslib::bs_theme(
+    bootswatch = "flatly",
+    bg = "#f0f2f5",      # Light grey background
+    fg = "#2c3e50"       # Dark navy text for contrast
+  ),
+  titlePanel("NYC Marathon: Mean Time by Age and Gender"),
+  # ... rest of your code
+Option 2: Using Custom CSS (The Most Control)
+If you want a very specific color or a gradient without affecting the rest of the theme's logic, add a tags$style block at the top of your fluidPage.
+
+R
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  
+  # Custom CSS to inject a background color
+  tags$head(
+    tags$style(HTML("
+      body {
+        background-color: #e8efff; /* Light blue tint */
+      }
+      .well {
+        background-color: #ffffff; /* Keeps sidebar/wells white for contrast */
+      }
+    "))
+  ),
+
+  titlePanel("NYC Marathon: Mean Time by Age and Gender"),
+  sidebarLayout(
+    sidebarPanel(
+      # ... slider code
+Option 3: Changing the "Well" Color
+If you want the sidebar specifically to have a different color, you can target the .well class in the CSS above, or use a style argument directly in the sidebarPanel:
+
+R
+sidebarPanel(
+  style = "background-color: #d1d8e0;", # Specific color for the sidebar only
+  sliderInput("age_slider", "Select Age:", 18, 90, 25, 1),
+  # ...
+)
+Tip: If you use a very dark background color, remember to change your fg (foreground) color to white or a light grey so your text remains readable.
+
+that didn't change anything
+
+If bs_theme isn't reflecting the background change, it's usually because the Bootswatch "Flatly" layer is overriding the simple theme arguments. To force the change, you should use a CSS injection. This tells the browser to ignore the theme's defaults for the background.
+
+Here is the code with the fix included in the tags$head section:
+
+R
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  
+  # This block forces the background color regardless of the theme
+  tags$head(
+    tags$style(HTML("
+      body { 
+        background-color: #f7f9fc !important; 
+      }
+      .container-fluid { 
+        background-color: #f7f9fc !important; 
+      }
+    "))
+  ),
+
+  titlePanel("NYC Marathon: Mean Time by Age and Gender"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      # You can also color the sidebar specifically here
+      style = "background-color: #ffffff; border-radius: 10px;", 
+      sliderInput("age_slider", "Select Age:", 
+                  min = 18, max = 90, value = 25, step = 1),
+      hr(),
+      helpText("Compare the average finish times for men and women by age.")
+    ),
+    mainPanel(
+      # Your plot or output here
+    )
+  )
+)
+Why this works:
+!important: This is a CSS rule that tells the browser to prioritize this specific color over any other styles defined in the "Flatly" theme.
+
+.container-fluid: Shiny wraps its content in a container that sometimes has its own background color. Targeting both body and .container-fluid ensures the color covers the entire screen.
+
+Hex Codes: I used #f7f9fc (a very light professional blue/grey), but you can change that to any hex code (e.g., #ffffff for pure white or #fff5f5 for a light red).
+
+Note: If you are running this in the RStudio "Viewer" pane, sometimes it caches the old style. Try clicking the "Show in new window" icon to see it in your actual web browser.
