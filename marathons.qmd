@@ -1,0 +1,700 @@
+---
+title: "NYC Marathons"
+format: html
+editor: visual
+---
+
+## Analyzing NYC Marathon Data
+
+Most runners can fudge their way through a half marathon, but even those who followed their plan to the letter can absolutely blow up during a full. Using a data set of NYC marathons form 1979 until 2024 (scraped from the NYRR site, found on Kaggle), I explore the answers to a few different questions, including:
+
+**Temperature**: How do times compare to the hottest year (2022) vs. a year with a more optimal temperature? Is there a way to adjust time based on temperature? What age group/gender was more affected by the heat? Does optimal marathon temperature (40 - 50 degrees) line up with optimal average performance (do years with a temperature in this range show better performance than those with temperatures outside it)?
+
+**Age and gender:** What does performance look like throughout the life cycle for men and women? Are the optimal ages the same? What is a fair way to age-grade a time? (Note: Since 2023, NYRR has included a nonbinary "X" option for gender.)
+
+Data sources:
+
+<https://www.kaggle.com/datasets/runningwithrock/nyc-marathon-results-all-years>
+
+<https://runarweb.com/weather_e.php>
+
+## Loading the data
+
+I used google docs becuase this file was too large for GitHub
+
+```{r, Warning = FALSE}
+library(tidyverse)
+library(fpp3)
+
+
+nyc_marathons <- read.csv("https://docs.google.com/uc?id=1bsOqVUDQ7kDnuZuHnL7jwXFBwcVY4JAg&export=download", na.strings = c("", "NA", "null", "NULL"),  header = TRUE)
+
+```
+
+### Getting historical weather data
+
+Scraping historical weather data from a website to later join with the marathon data set.
+
+```{r}
+library(rvest)
+url <- "https://runarweb.com/weather_e.php"
+
+weather_data <- read_html(url) %>%
+  html_element("table") %>% 
+  html_table()
+
+colnames(weather_data) <- c("date", "min_temp", "max_temp", "precipitation")
+
+weather_data <- weather_data |>
+  select(date, min_temp, max_temp, precipitation)
+
+weather_data_2 <-   tail(weather_data, -4) 
+
+weather_data_3 <- head(weather_data_2, 46)
+
+
+```
+
+```{r}
+
+#cleaning to separate columns and remove letters from temps 
+
+weathered <- weather_data_3 |>
+    separate(col = min_temp, into = c("min_temp", "min_temp_c"), sep = "/") |>
+  separate(col = max_temp, into = c("max_temp", "max_temp_c"), sep = "/") |>
+  #removing the F from min and max temp 
+  mutate(max_temp = str_remove(max_temp, "F")) |>
+  mutate(min_temp = str_remove(min_temp, "F")) 
+
+#getting only the year
+
+weathery <- weathered |> 
+   mutate(date = str_sub(date, start = -4))
+
+#selecting only the columns we want and formatting as numeric
+temps <- weathery |>
+    select("Year" = date, min_temp, max_temp) |>
+  mutate(Year = as.numeric(Year)) |>
+   mutate(min_temp = as.numeric(min_temp)) |>
+   mutate(max_temp = as.numeric(max_temp)) 
+
+  
+```
+
+## Exploratory analysis: temperature
+
+Exploratory analysis of a very hot year (2022) versus a more normal year (2021). Did performance differ overall?
+
+```{r}
+nyc_2022 <- nyc_marathons |> filter(Year == 2022)
+
+nyc_2021 <- nyc_marathons |> filter(Year == 2021)
+
+
+nyc_2022$Finish.Time_parsed <- hms(nyc_2022$Finish.Time)
+
+
+nyc_2022$Finish_Minutes <- as.numeric(nyc_2022$Finish.Time_parsed, "minutes")
+
+nyc_2021$Finish.Time_parsed <- hms(nyc_2021$Finish.Time)
+
+nyc_2021$Finish_Minutes <- as.numeric(nyc_2021$Finish.Time_parsed, "minutes")
+
+#a histogram
+
+ggplot(data = nyc_2022, aes(x = Finish_Minutes, fill = Gender)) +
+  geom_histogram(binwidth = 5) + 
+  labs(title = "2022 NYC Marathon")
+
+ggplot(data = (nyc_2022 |> filter(Gender == "W")), aes(x = Finish_Minutes)) +
+  geom_histogram(binwidth = 5) +
+  labs(title = "2022 women")
+
+ggplot(data = nyc_2021, aes(x = Finish_Minutes, fill = Gender)) +
+  geom_histogram(binwidth = 5) + labs(title = "2021 NYC Marathon")
+
+
+```
+
+The peaks for the two years are significantly different, indicating there is a difference in finish time based on temperature.
+
+### Joining the marathon table with temperature table
+
+```{r}
+#converting time to minutes
+nyc_marathons$Finish.Time_parsed <- hms(nyc_marathons$Finish.Time)
+
+nyc_marathons$Finish_Minutes <- as.numeric(nyc_marathons$Finish.Time_parsed, "minutes")
+#joining with temp
+marathon_joined <-left_join(nyc_marathons, temps, by = "Year")
+```
+
+### Exploring trends in finish time, temperature, and participation
+
+Let's look how the number of participants has changed over the years.
+
+```{r}
+
+#number of participants over the years
+
+participants <- marathon_joined |> count(Year)
+
+participants |> mutate(n = n/1000) |>
+  ggplot(aes(x = Year, y = n, color = Year)) +
+  geom_point(shape = 1) + 
+  geom_line() +
+  labs(title = "Number of Participants Over the Years", y = "Participants (thousands)")
+
+
+```
+
+Numbers have generally climbed over the years. There are dips in 2001 (Sept 11) and 2021 (Covid-19). The 2012 marathon was canceled due to Hurricane Sandy.
+
+Let's look at how the average time has changed.
+
+```{r}
+
+mins_by_year <- marathon_joined |>
+  filter(Year > 1985) |> #when the marathon moved to November (1986)
+  group_by(Year, max_temp) |>
+  summarise(mean_time = mean(Finish_Minutes))
+
+#the mean time has generally gone up over the years
+mins_by_year |> ggplot(aes(x = Year, y = mean_time)) +
+  geom_point() +
+  labs(title = "Average Marathon Time by Year", y = "Mean Time (Minutes)") +
+  theme_minimal()
+
+#average time plotted by temperature (as the temperature goes up, does time go down?)
+mins_by_year |> ggplot(aes(x = max_temp, y = mean_time)) +
+  geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(x = "Max Temperature", y = "Mean Time", title = "Average Times by Temperature")
+
+
+```
+
+The mean time has gone up over the years, likely due to the wider range of participants. I'm puzzled by the jump in average time that happened around 2003-2005. Those were not hot years, though the race did get larger.
+
+As for the time by temperature, I believe some of the lower averages are from when the marathon was smaller.
+
+### Trends by gender
+
+```{r}
+
+#by men, women, and nonbinary people
+mins_by_year_gender <- marathon_joined |>
+  filter(Year > 1985) |> #when the marathon moved to November (1986)
+  group_by(Year, max_temp, Gender) |>
+  summarise(mean_time = mean(Finish_Minutes))
+
+#broken out yearly
+
+mins_by_year_gender |> ggplot(aes(x = Year, y = mean_time, color = Gender)) +
+  geom_point() +
+  labs(y = "Mean Time (Minutes)", title = "Performance by Year/Gender") +
+  theme_minimal()
+
+#temperature and gender 
+mins_by_year_gender |> ggplot(aes(x = max_temp, y = mean_time, color = Gender)) +
+  geom_point() +
+  labs(y = "Mean Time (Minutes)", x = "Max Temp", title = "Performance by Temp/Gender")
+
+#gender split by year
+
+gender_by_year <- marathon_joined |>
+  group_by(Year, max_temp, Gender) |>
+  summarise(mean_time = mean(Finish_Minutes), num_gender = n()) 
+
+gender_by_year |> ggplot(aes(x = Year, y = mean_time, color = Gender, size = num_gender)) +
+  geom_point(shape = 1) + 
+  labs(y = "Average Time", title = "Participants by Year, Broken Out by Gender") +
+  theme_minimal()
+
+
+gender_by_year |> 
+    filter(!is.na(Gender)) |> 
+  ggplot(aes(x = Year, y = num_gender, color = Gender)) +
+  geom_point(shape = 1) + 
+  labs(y = "Participants", title = "Participants by Year, Broken Out by Gender") +
+  theme_minimal()  
+```
+
+Pretty consistently about 3-10k more men participate than women each year. We also see a consistent, roughly even gap between men's and women's performance by year. When we break things out by temperature, men/women's times appear less consistent.
+
+### Exploring age and finish time
+
+When does performance peak? Is it different for men and women?
+
+```{r}
+gender_and_age <- marathon_joined |>
+  group_by(Age, Gender) |>
+  summarise(mean_time = mean(Finish_Minutes), num_gender = n()) 
+
+#filter out anyone younger than 18 because there aren't many/some seem like errors
+gender_and_age |>
+  filter(!is.na(Gender)) |> #filter out NAs
+  filter(Age > 17) |>
+  ggplot(aes(x = Age, y = mean_time, color = Gender)) +
+  geom_point() + 
+  labs(y = "Mean Time (in Minutes)", title = "Mean Performance by Age and Gender") +
+  theme_minimal()
+```
+
+It makes sense that non-binary runners are all over the map, since we don't have many data points. The scattering at the end (80+ for men and \~70+ for women) is likely also because we have fewer data points. However, there is a very consistent, seemingly non-linear pattern to these points. Performance peaks in the late 20s and early 30s, then slowly declines (with a strange drop in time for both genders at \~50 and 60).
+
+Does the difference between average times remain consistent over time?
+
+```{r}
+gender_age_comparison <- gender_and_age |>
+   filter(!is.na(Gender)) |> #filter out NAs
+  filter(Gender != "X") |>#filtering out non-binary runners, sine we don't have enough data
+  filter(Age > 17)
+
+gender_wide <- gender_age_comparison |>
+  pivot_wider(
+    names_from = Gender,
+    values_from = c(mean_time, num_gender),
+    names_glue = "{.value}_{Gender}"
+  )
+
+#create a new column for mean difference
+gender_wide <- gender_wide |>
+  mutate(mean_diff = mean_time_W - mean_time_M)
+
+#graph it and filter out anyone over 80 because the data is too sparse
+
+gender_wide |> filter(Age < 80) |>
+  ggplot(aes(x = Age, y = mean_diff, color = Age)) +
+  geom_point() +
+  labs(y = "Mean Difference (Minutes)", title = "Mean Difference Between Men's and Women's Times by Age") +
+  theme_minimal()
+
+#by percentage of total time
+gender_percent <- gender_wide |>
+    mutate(perc = round((mean_time_W - mean_time_M) / mean_time_M,3))
+
+gender_percent |> filter(Age < 80) |>
+  ggplot(aes(x = Age, y = perc, color = Age)) +
+  geom_point() +
+  labs(y = "Mean Difference (Percent)", title = "Mean Percent Difference Between Men's and Women's Times by Age") +
+  theme_minimal()
+```
+
+The difference is not consistent, with the gap widening though about 37, dipping, and then gong back up before it dips again. Broken out by percentage, we see a similar shape, with a dip in percent difference between 37 and 47.
+
+### Mean differences and Temperatures
+
+Comparing 2022 to "normal" year 2024, when temps were closer to ideal (between 44 and 54).
+
+Look at two different groupings: gender/age and pace groups
+
+```{r}
+#putting the histograms for 2024 (regular year) and 2022 (warm year) together 
+ggplot(subset(nyc_marathons, Year %in% c(2024, 2022)), 
+       aes(x = Finish_Minutes, fill = as.factor(Year))) +
+    geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+    scale_fill_manual(values = c("2024" = "#69b3a2", "2022" = "#404080")) +
+    labs(fill = "Year", title = "2022 vs. 2024 Finish Times") +
+    theme_minimal()
+
+years_2022_2024 <- marathon_joined |>
+  filter(Year %in% c(2022, 2024))
+
+#calculating the average time by gender
+years_2224 <- years_2022_2024 |> 
+  filter(Age > 17) |>
+  filter(Gender != "X") |>
+  group_by(Age, Gender, Year) |>
+  summarise(mean_time = mean(Finish_Minutes), num_gender = n())
+
+
+gwide_again <- years_2224 |>
+  pivot_wider(
+    names_from = Year,
+    values_from = c(mean_time, num_gender),
+    names_glue = "{.value}_{Year}"
+  )
+
+#calculate how much slower, on average, people of different ages were in 2022
+pace_comparison_24 <- gwide_again |>
+  mutate(diff = mean_time_2022 - mean_time_2024) 
+
+#eliminating data for people over 75 because it becomes less consistent
+pace_comparison_24 |> filter(Age < 75) |>
+  ggplot(aes(x = Age, y = diff, color = Gender)) + 
+  geom_point() +
+  theme_minimal() + 
+  labs (y = "Difference", title = "Gross Mean Difference in Finish Time", subtitle = "Versus a Colder Year")
+```
+
+Men, who tend to be faster overall, seem to have been more affected by the heat, with overall differences by age looking slightly larger.
+
+Let's bucket these into age groups and look it it by percentage, because raw numbers don't account for general differences in time.
+
+```{r}
+pace_comparison_percentage <- gwide_again |>
+  mutate(diff_percent = round((mean_time_2022 - mean_time_2024) / mean_time_2024, 4))
+
+#Adding an age group
+gwide_grouped <- gwide_again |>
+    mutate(age_group = cut(Age, 
+                           breaks = c(18, 25, 35, 45, 55, 65, Inf), 
+                           labels = c("18-24", "25-34", "35-44", "45-54", "55-64", "65+"), 
+                           right = FALSE))
+
+#using weighted mean so the number of runners in each age cat are accounted for
+group_diffs <- gwide_grouped |> 
+  group_by(Gender, age_group) |> 
+  summarise(
+    mean_2022 = weighted.mean(mean_time_2022, num_gender_2022, na.rm = TRUE),
+    mean_2024 = weighted.mean(mean_time_2024, num_gender_2024, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#adding a percent difference
+group_diffs <- group_diffs |>
+   mutate(diff_percent = round((mean_2022 - mean_2024) / mean_2024, 4))
+
+group_diffs |> ggplot(aes(x = age_group, y=diff_percent, fill = Gender)) + 
+  geom_col(position = "dodge") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(x = "Age Group", y = "Percent Difference", title = "Heat Impacts by Gender and Age Group")
+```
+
+Again, the impacts are significantly different between men and women in every age group. Heat impact peaks for men in the 25-34 age group at almost 10%. This makes sense because muscles make heat and make it harder to regulate your temperature; men in the 25-34 age group tend to have more muscle. Women also tend to have better thermoregulation in general.
+
+Men also tend to go out too hot, and it's harder to recover from that when it's hot out. I don't have a citation for that, but it feels true.
+
+This finding conflicts with this study, which suggests [older athlete](https://www.runnersworld.com/advanced/a20821806/study-older-athletes-struggle-more-in-the-heat/)s struggle more in the heat.
+
+I also wonder if heat heat impacts you more if you're faster or slower. This is complicated by the fact that people tend to start later in the day if they are slower.
+
+### Age- and temperature-grading
+
+I found an [age-grading system](https://rundida.com/guide/average-marathon-time-by-age/) that expresses your performance as the percentage of the world record time for your age and gender. It called anyone below 50% a casual/beginner runner, which didn't feel right (these people are still finishing a marathon). So, I decided to create something else.
+
+Introducing the incredibly flattering Sam Barbaro age- and temperature-grading system.
+
+This system takes your percentage in your age and gender (so, if you're 45, you will be ranked with other 45-year-old women) and gives you the corresponding time in the top-performing age group in an ideal year.
+
+Ideal marathon temperature for regular runners is 40-50 degrees. However, temperatures for the NYC marathon haven't hit that range since 2014, which was kind of a while ago. I've used a more recent year, 2024, where temperatures were between 44 and 54.
+
+We can also see which year in the past 15 years had the lowest mean time for men and women to see if this holds.
+
+```{r}
+mean_times <- marathon_joined |> filter(Year > 2009) |>
+  filter(Gender == "M"| Gender == "W") |>
+  group_by(Year, Gender, max_temp) |>
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) |>
+  arrange((Mean_Time))
+  
+ mean_times
+```
+
+The best year for men was when temperatures reached a high of 54 in 2024. For women, it was when temperatures reached a high of 54 in 2011. We will go with 2024, since it is more recent and reflects the current popularity of marathons.
+
+The worst year for everyone was 2022.
+
+Let's check the size of the 25-34 age group (peak performance bracket) in an ideal year:
+
+```{r}
+#Filter out peak performers in the 25 -34 age group
+age_scale_2024 <-  marathon_joined |>
+  filter(between(Age, 25, 34), Year == 2024)
+
+count(age_scale_2024)
+  
+```
+
+There are 18k participants in this bracket, about 40% of all participants, which seems like too much. Let's narrow it down further. What are peak performance ages for men and women?
+
+```{r}
+library(gt)
+
+gender_and_age |> filter(Gender == "W") |>
+  filter(Age > 17) |>
+  arrange(mean_time)
+
+gender_and_age |> filter(Gender == "W") |>
+  filter(Age > 17) |>
+  arrange(mean_time) |>
+ select(Age, mean_time) |>
+  gt() |>
+  cols_label(
+    Age = "Age",
+    mean_time = "Mean Time",
+  ) |>
+  tab_header(title = "Fastest Ages (Women)")
+
+  
+```
+
+For women, peak performance is 24-26. (I tried a lot of fixes with the GT package, but it's just not working for me.)
+
+```{r}
+gender_and_age |> filter(Gender == "M") |>
+  filter(Age > 17) |>
+  arrange(mean_time)
+```
+
+For men, it's also 24-26.
+
+Noting that there's conflicting information about peak marathon age, but it's generally cited as 30-34. There could be many reasons for this discrepancy (which is not a sample size issue). Maybe lifelong runners tend to participate at 24-26, while most people get into running in their 30s. Perhaps hillier marathons, like NYC, are better-suited to the 24-26 age group.
+
+The new scale:
+
+```{r}
+scale_2024 <-  marathon_joined |>
+  filter(between(Age, 24, 26), Year == 2024)
+
+count(scale_2024)
+summary(scale_2024)
+```
+
+4832 times (under 10% of participants), ranging from 2 hours 17 mins to 9 hours 22 mins. The fastest time is an elite and the slowest time is probably someone who walked. I am keeping the outliers because some people are elite and some people walk. I also recognize that this logic may break down in older age groups: someone 80 years old may rank #1 for their age out of fewer participants, but may have never been capable of a 2:17 marathon; someone 40 years old may come in last for their age, but finish in less than 9 hours 22 minutes; a 34-year-old elite may have a better time than 2:17.
+
+One fix for this could be to include a case statement saying if your time is \< 2:17 or the top women's time, 2:32, then the age-graded time should just be your time. Or, if your time is less than the age-graded time, the result should be your time.
+
+```{r}
+
+# Create the Men's table
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE)) 
+
+men_percentile <- men_percentile |>
+  mutate(Mean_Time =round(Mean_Time,0))
+
+# Create the Women's table
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = mean(Finish_Minutes, na.rm = TRUE))
+
+women_percentile <- women_percentile |>
+  mutate(Mean_Time =round(Mean_Time,0))
+```
+
+To find your age percentage, find your rank in your age (year)
+
+```{r}
+
+
+age_index <- marathon_joined |> 
+  filter(Gender == "W", Age == 42, Year == 2022)|>
+  arrange(Finish_Minutes) |>
+  mutate(age_index = row_number())
+
+count(age_index)
+
+
+```
+
+let's say the age index is 363 (finished in \~5 hours, 1 min)
+
+```{r}
+index_42 <- as.data.frame(round(363/count(age_index),2)*100)
+
+#this returns the actual time
+actual_time <- age_index |>
+  filter(age_index == 363)  |>
+  select(Finish_Minutes)
+actual_time
+```
+
+```{r}
+age_graded_42 <- index_42 |> 
+  left_join(women_percentile, by = c("n" = "Percentile")) |> 
+    mutate(Mean_Time = pmin(Mean_Time, actual_time$Finish_Minutes))
+
+age_graded_42 
+```
+
+This person's age- and temperature-graded time is 4 hours and 32 minutes.
+
+What if we gender-grade?
+
+```{r}
+age_graded_42_m <- index_42 |> 
+  left_join(men_percentile, by = c("n" = "Percentile"))
+
+age_graded_42_m
+```
+
+Four hours and eight minutes,
+
+### An age-grading shiny dashboard
+
+This does not account for temperature.
+
+```{r, warning=FALSE}
+library(shiny)
+
+
+# takes a scale of people age 24-26 in 2024
+scale_2024 <- marathon_joined |> filter(between(Age, 24, 26), Year == 2024)
+
+#creates a scale for men
+men_percentile <- scale_2024 %>%
+  filter(Gender == "M") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+#creates a scale for women
+women_percentile <- scale_2024 %>%
+  filter(Gender == "W") %>%
+  mutate(Percentile = ntile(Finish_Minutes, 100)) %>%
+  group_by(Percentile) %>%
+  summarize(Mean_Time = round(mean(Finish_Minutes, na.rm = TRUE), 0))
+
+# SHINY UI
+ui <- fluidPage(
+  titlePanel("NYC Marathon Age Grader"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("user_age", "Your Age:", value = 39, min = 18, max = 99),
+      selectInput("user_gender", "Gender:", choices = c("W", "M")),
+      numericInput("user_time", "Your Finish Time (Minutes):", value = 301),
+      hr(),
+      helpText("This grades your performance against the peak age bracket (24-26).")
+    ),
+    mainPanel(
+      h3("Your Results"),
+      uiOutput("graded_results")
+    )
+  )
+)
+
+# --- 3. SHINY SERVER ---
+server <- function(input, output) {
+  
+  output$graded_results <- renderUI({
+    # 1. Get the user's cohort from the full dataset
+    cohort <- marathon_joined |> 
+      filter(Gender == input$user_gender, Age == input$user_age, Year == 2022) |>
+      arrange(Finish_Minutes)
+    
+    # 2. Find user's percentile rank in that cohort
+    # We find how many people in their age/year they beat
+    rank <- sum(cohort$Finish_Minutes <= input$user_time)
+    user_percentile <- round((rank / nrow(cohort)) * 100, 0)
+    
+    # 3. Pull the "Graded" time from the 2024 Peak lookup
+    lookup_table <- if(input$user_gender == "W") women_percentile else men_percentile
+    graded_val <- lookup_table$Mean_Time[lookup_table$Percentile == user_percentile]
+    
+    # Format minutes back to H:MM
+    format_time <- function(mins) {
+      paste0(mins %/% 60, "h ", sprintf("%02d", mins %% 60), "m")
+    }
+    
+    tagList(
+      h4(paste("Your Percentile in Cohort:", user_percentile, "%")),
+      h2(paste("Age-Graded Time:", format_time(graded_val))),
+      p("Wow, you were fast!")
+    )
+  })
+}
+
+shinyApp(ui, server)
+```
+
+### Creating a slider
+
+This slider shows average NY marathon performance from age 18 onward for men and women.
+
+```{r}
+gender_means_clean <- gender_and_age |>
+  filter(!is.na(Gender)) |> 
+  filter(Age > 17 | Age < 90) |>
+  filter(Gender != "X")
+
+```
+
+```{r}
+
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  titlePanel("NYC Marathon: Mean Time by Age and Gender"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("age_slider", "Select Age:", 
+                  min = 18, 
+                  max = 90, 
+                  value = 25, 
+                  step = 1),
+      hr(),
+      helpText("Compare the average finish times for men and women by age.")
+    ),
+    
+    mainPanel(
+      # Large display for the mean times
+      fluidRow(
+        column(6, uiOutput("men_box")),
+        column(6, uiOutput("women_box"))
+      ),
+      br(),
+      # Plot showing the context of that age in the full dataset
+      plotOutput("dist_plot")
+    )
+  )
+)
+
+# --- SHINY SERVER ---
+server <- function(input, output) {
+  
+  # Reactive data for the selected age
+  selected_data <- reactive({
+    gender_means_clean |> filter(Age == input$age_slider)
+  })
+  
+  # Helper to format minutes to H:MM
+  format_time <- function(mins) {
+    if(is.na(mins)) return("No Data")
+    paste0(mins %/% 60, "h ", sprintf("%02d", round(mins %% 60, 0)), "m")
+  }
+  
+  # UI Box for Men
+  output$men_box <- renderUI({
+    val <- selected_data() |> filter(Gender == "M") |> pull(mean_time)
+    wellPanel(style = "background: #f7da9c; border-left: 5px solid #fab520;",
+      h4("Men (Average Time)"),
+      h2(format_time(val))
+    )
+  })
+  
+  # UI Box for Women
+  output$women_box <- renderUI({
+    val <- selected_data() |> filter(Gender == "W") |> pull(mean_time)
+    wellPanel(style = "background: #cffce0; border-left: 5px solid #4bfab7;",
+      h4("Women (Average Time)"),
+      h2(format_time(val))
+    )
+  })
+  
+  # Plot showing the trend with a highlight on the selected age
+  output$dist_plot <- renderPlot({
+    ggplot(gender_means_clean, aes(x = Age, y = mean_time, color = Gender)) +
+      geom_line(alpha = 0.5, linewidth = 1.5) +
+      geom_point(data = selected_data(), size = 5) + # Highlight the selected point
+      scale_color_manual(values = c("M" = "#fab520", "W" = "#4bfab7")) +
+      labs(title = paste("Age", input$age_slider, "selected"),
+           y = "Mean Time (Minutes)") +
+      theme_minimal()
+  })
+}
+
+shinyApp(ui, server)
+    
+```
+
+### Citations
+
+For Shiny code: Google Gemini. (2026). Gemini 3 Flash \[Large language model\].\
+https://gemini.google.com. Accessed May 6, 2026.
